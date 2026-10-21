@@ -1,3 +1,14 @@
+## 0.4.19 (2026-10-21)
+
+### 🩹 Fixes
+
+- **ci:** keep stale manifests out of published packages ([6c711d2b](https://github.com/abapify/adt-cli/commit/6c711d2b))
+
+### ❤️ Thank You
+
+- Devin @devin-ai-integration[bot]
+- ThePlenkov @ThePlenkov
+
 ## 0.4.18 (2026-10-21)
 
 ### 🩹 Fixes
