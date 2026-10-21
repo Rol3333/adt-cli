@@ -134,6 +134,28 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
           echo "release tags at HEAD: ${TAGS:-<none>}"
 
+      - name: Refresh bun.lock in release commit
+        # `nx release` bumps package.json versions (workspace deps are real
+        # versions, not `workspace:*`), but bun.lock keeps the old versions —
+        # it drifts every release and the tagged commit's lock is stale.
+        # Re-resolve here, fold the lock refresh into the release commit via
+        # --amend, and re-point the release tags to the amended commit before
+        # anything is pushed.
+        if: ${{ !inputs.dry_run && steps.get_tags.outputs.tags != '' }}
+        run: |
+          bun install
+          if ! git diff --quiet bun.lock; then
+            git add bun.lock
+            git commit --amend --no-edit
+            IFS=',' read -ra TAGS <<< "${{ steps.get_tags.outputs.tags }}"
+            for tag in "${TAGS[@]}"; do
+              git tag -f "$tag"
+            done
+            echo "bun.lock refreshed and release tags re-pointed: ${TAGS[*]}"
+          else
+            echo "bun.lock already in sync — nothing to amend"
+          fi
+
       - name: Push commit and tags
         if: ${{ !inputs.dry_run && steps.get_tags.outputs.tags != '' }}
         run: |
