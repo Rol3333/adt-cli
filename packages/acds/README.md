@@ -87,10 +87,20 @@ type CdsDefinition =
   | TableDefinition
   | StructureDefinition
   | SimpleTypeDefinition
+  | ViewEntityDefinition
+  | AbstractEntityDefinition
+  | CustomEntityDefinition
+  | ExternalEntityDefinition
+  | TableFunctionDefinition
+  | ScalarFunctionDefinition
+  | HierarchyDefinition
+  | AspectDefinition
+  | AnnotationDefinition
+  | AccessPolicyDefinition
   | ServiceDefinition
+  | ExtensionDefinition
   | MetadataExtension
-  | RoleDefinition // Phase 2 placeholder
-  | ViewEntityDefinition; // Phase 3 placeholder
+  | RoleDefinition;
 ```
 
 #### Definitions
@@ -232,6 +242,16 @@ interface CrossJoinClause {
 }
 
 type JoinClause = ConditionedJoinClause | CrossJoinClause;
+
+// A join source is either a plain data source or a parenthesized group.
+type JoinSource = DataSource | JoinGroup;
+
+// `join (A join B on …) on …` — the group acts as a single join source.
+interface JoinGroup {
+  kind: 'joinGroup';
+  source: JoinSource; // nested — may itself be a group
+  joins: JoinClause[]; // the join chain inside the parentheses
+}
 ```
 
 Supported join spellings (normalized to `JoinType`):

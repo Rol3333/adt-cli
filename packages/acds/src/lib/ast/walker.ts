@@ -162,9 +162,30 @@ export function* walkFromAssociations(file: CdsSourceFile): Iterable<{
 }> {
   for (const def of walkDefinitions(file)) {
     if (def.kind !== 'viewEntity') continue;
-    for (const a of def.fromAssociations ?? []) {
-      yield { owner: def, association: a };
+    yield* fromAssocOfSelect(def, def);
+    // Set-operation branches (`union … select …`) carry their own FROM
+    // associations.
+    for (const op of def.setOperations ?? []) {
+      yield* fromAssocOfSelect(def, op.statement);
     }
+  }
+}
+
+function* fromAssocOfSelect(
+  owner: ViewEntityDefinition,
+  select: {
+    fromAssociations?: AssociationDeclaration[];
+    setOperations?: { statement: SelectStatement }[];
+  },
+): Iterable<{
+  owner: ViewEntityDefinition;
+  association: AssociationDeclaration;
+}> {
+  for (const a of select.fromAssociations ?? []) {
+    yield { owner, association: a };
+  }
+  for (const op of select.setOperations ?? []) {
+    yield* fromAssocOfSelect(owner, op.statement);
   }
 }
 

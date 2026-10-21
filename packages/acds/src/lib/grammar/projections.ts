@@ -30,6 +30,7 @@ export const projectionsCoverage: GrammarCoverage = {
     'view element with key modifier',
     'view element with virtual modifier',
     'view element with function call (coalesce(a, b), sum(x))',
+    'window function over (partition by ... order by ...)',
     'view element with cast expression (cast(x as type [preserving type]))',
     'typed field (abstract/custom entity)',
     'case expression (operand and searched forms)',

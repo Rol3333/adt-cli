@@ -16,7 +16,7 @@ define root view entity Z_SALES_ORDER_X
   association [0..*] to I_SalesOrderItem as _item
     on $projection.SalesOrder = _item.SalesOrder
   association to parent Z_SALES_ROOT as _parent
-    on $projection.ParentKey = _parent.Key
+    on _so.SalesOrder = _parent.Key
 {
   key _so.SalesOrder,
       _so.SoldToParty          as Customer,
@@ -44,7 +44,7 @@ having count(*) > 0
 union all
   select from I_SalesOrderArchive as _arch
   association to parent Z_SALES_ROOT as _parent
-    on $projection.ParentKey = _parent.Key
+    on _arch.SalesOrder = _parent.Key
   {
     key _arch.SalesOrder,
         _arch.SoldToParty as Customer,
