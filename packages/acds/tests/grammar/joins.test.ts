@@ -43,9 +43,24 @@ describe('joins', () => {
     expect(v.joins[0].joinType).toBe('inner');
   });
 
-  it('normalizes LEFT JOIN and LEFT OUTER JOIN to leftOuter', () => {
+  it('normalizes LEFT OUTER JOIN to leftOuter', () => {
     const v = getView(`
       define view entity V as select from A
+        left outer join B on A.k = B.k
+        left outer join C on B.k = C.k
+      {
+        key A.k
+      }
+    `);
+
+    expect(v.joins.map((j) => j.joinType)).toEqual(['leftOuter', 'leftOuter']);
+  });
+
+  it('normalizes LEFT JOIN in a legacy view to leftOuter', () => {
+    // `LEFT JOIN` without `OUTER` is only accepted in the legacy
+    // `define view` syntax — a view entity requires `LEFT OUTER JOIN`.
+    const v = getView(`
+      define view V as select from A
         left join B on A.k = B.k
         left outer join C on B.k = C.k
       {
@@ -56,9 +71,27 @@ describe('joins', () => {
     expect(v.joins.map((j) => j.joinType)).toEqual(['leftOuter', 'leftOuter']);
   });
 
-  it('normalizes RIGHT JOIN and RIGHT OUTER JOIN to rightOuter', () => {
+  it('normalizes RIGHT OUTER JOIN to rightOuter', () => {
     const v = getView(`
       define view entity V as select from A
+        right outer join B on A.k = B.k
+        right outer join C on B.k = C.k
+      {
+        key A.k
+      }
+    `);
+
+    expect(v.joins.map((j) => j.joinType)).toEqual([
+      'rightOuter',
+      'rightOuter',
+    ]);
+  });
+
+  it('normalizes RIGHT JOIN in a legacy view to rightOuter', () => {
+    // `RIGHT JOIN` without `OUTER` is only accepted in the legacy
+    // `define view` syntax — a view entity requires `RIGHT OUTER JOIN`.
+    const v = getView(`
+      define view V as select from A
         right join B on A.k = B.k
         right outer join C on B.k = C.k
       {
@@ -106,9 +139,9 @@ describe('joins', () => {
       define view entity V as select from A
         join B on A.k = B.k
         inner join C on B.k = C.k
-        left join D on C.k = D.k
+        left outer join D on C.k = D.k
         left outer join E on D.k = E.k
-        right join F on E.k = F.k
+        right outer join F on E.k = F.k
         right outer join G on F.k = G.k
         cross join H
       {

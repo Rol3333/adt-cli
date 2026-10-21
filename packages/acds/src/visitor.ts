@@ -297,7 +297,7 @@ export class CdsVisitor extends BaseCstVisitor {
 
   dataSource(ctx: Ctx): DataSource {
     const name = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
-    const aliasNode = asNodes(ctx.cdsName)[0];
+    const aliasNode = asNodes(ctx.cdsName)[0] ?? asNodes(ctx.bareAliasName)[0];
     const alias = aliasNode ? (this.visit(aliasNode) as string) : undefined;
     const parameters = ctx.dataSourceParameters
       ? (this.visit(
@@ -314,24 +314,37 @@ export class CdsVisitor extends BaseCstVisitor {
   // ---- Joins -----------------------------------------------
 
   joinClause(ctx: Ctx): JoinClause {
-    // `JOIN` / `INNER JOIN` are normalized to `inner`.
-    const joinType: JoinType = asTokens(ctx.Cross).length
-      ? 'cross'
-      : asTokens(ctx.Left).length
-        ? 'leftOuter'
-        : asTokens(ctx.Right).length
-          ? 'rightOuter'
-          : 'inner';
-    const source = this.visit(asNodes(ctx.dataSource)[0]) as DataSource;
-    const on = ctx.expression
-      ? toExpression(asNodes(ctx.expression)[0])
-      : undefined;
+    if (ctx.dataSource) {
+      // A cross join — it has no ON condition.
+      const source = this.visit(asNodes(ctx.dataSource)[0]) as DataSource;
+      return { kind: 'join', joinType: 'cross', source };
+    }
+
+    const joinType = this.visit(asNodes(ctx.joinType)[0]) as JoinType;
+    const joined = this.visit(asNodes(ctx.joinSource)[0]) as {
+      source: DataSource;
+      on: Expression;
+    };
     return {
       kind: 'join',
       joinType,
-      source,
-      ...(on && { on }),
+      source: joined.source,
+      on: joined.on,
     };
+  }
+
+  joinType(ctx: Ctx): JoinType {
+    // `JOIN` / `INNER JOIN` are normalized to `inner`.
+    if (asTokens(ctx.Cross).length) return 'cross';
+    if (asTokens(ctx.Left).length) return 'leftOuter';
+    if (asTokens(ctx.Right).length) return 'rightOuter';
+    return 'inner';
+  }
+
+  joinSource(ctx: Ctx): { source: DataSource; on: Expression } {
+    const source = this.visit(asNodes(ctx.dataSource)[0]) as DataSource;
+    const on = toExpression(asNodes(ctx.expression)[0]);
+    return { source, on };
   }
 
   dataSourceParameters(ctx: Ctx): DataSourceParameter[] {
