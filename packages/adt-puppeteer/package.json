@@ -20,7 +20,7 @@
     "@abapify/adt-auth": "0.4.17",
     "@abapify/adt-config": "0.4.17",
     "@abapify/browser-auth": "0.4.17",
-    "puppeteer": "^24.0.0"
+    "puppeteer": "^25.15.0"
   },
   "peerDependencies": {
     "puppeteer": ">=22.0.0"
