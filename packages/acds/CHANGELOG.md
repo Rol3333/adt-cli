@@ -17,7 +17,7 @@
 ### ❤️ Thank You
 
 - Devin @devin-ai-integration[bot]
-- rol3333yahoo.com
+- Rol3333 @Rol3333
 - ThePlenkov @ThePlenkov
 
 ## 0.4.16 (2026-09-29)
