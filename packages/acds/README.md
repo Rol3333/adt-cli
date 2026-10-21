@@ -28,8 +28,6 @@ Parses `.acds` (ABAP CDS DDL) source code into a fully typed Abstract Syntax Tre
 - **FROM clause** — join chains, parameterized sources, FROM associations
 - **View flavours** — `define view entity <name>` and the legacy `define view <name>`
 - **Projection elements** — paths, calls (`coalesce(a, b)`, `sum(x)`) and `cast(x as type [preserving type])`
-- **View flavours** — `define view entity <name>` and the legacy `define view <name>`
-- **Projection elements** — paths, calls (`coalesce(a, b)`, `sum(x)`) and `cast(x as type [preserving type])`
 
 ## Installation
 
