@@ -1,3 +1,14 @@
+## 0.4.18 (2026-10-21)
+
+### 🩹 Fixes
+
+- **deps:** bump dependencies and remediate audit findings ([d15ce96e](https://github.com/abapify/adt-cli/commit/d15ce96e))
+
+### ❤️ Thank You
+
+- Devin @devin-ai-integration[bot]
+- ThePlenkov @ThePlenkov
+
 ## 0.4.17 (2026-10-21)
 
 This was a version bump only for @abapify/adt-puppeteer to align it with other projects, there were no code changes.
