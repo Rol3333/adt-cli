@@ -5,17 +5,20 @@
  *   [annotation*] [key] [virtual] [redirected] (
  *       <name> : <type> [not null]    -- typed field (abstract/custom entities)
  *     | <path> [as <alias>]           -- projection element
- *     | <func>( <arg> , ... ) [as <alias>]
+ *     | <func>( <arg> , ... ) [as <alias>]   -- incl. empty calls f()
  *     | cast( <value> as <type> [preserving type] ) [as <alias>]
+ *     | case <oper> when ... then ... [else ...] end
+ *     | case when <cond> then ... [else ...] end
+ *     | <operand> <arith-op> <operand> ...   -- + - * / between operands
+ *     | <path> : localized                 -- projection-view localized element
  *   ) ;|,
  *
- * Plus any association declarations (see `associations.ts`).
+ * Plus any association declarations (see `associations.ts`), projection-view
+ * association redirections (`<assoc> : redirected to <target>`), and
+ * `redirected to composition child <target>` elements.
  *
  * Not yet implemented:
- *   - Case / when / else expressions.
- *   - Arithmetic operators between operands.
- *   - Window functions.
- *   - Unions / selects combined in element bodies.
+ *   - Window functions (`over ( ... )` frames are tokenized but kept opaque).
  */
 import type { GrammarCoverage } from './index';
 
@@ -29,7 +32,11 @@ export const projectionsCoverage: GrammarCoverage = {
     'view element with function call (coalesce(a, b), sum(x))',
     'view element with cast expression (cast(x as type [preserving type]))',
     'typed field (abstract/custom entity)',
-    'view where clause',
+    'case expression (operand and searched forms)',
+    'arithmetic expression in element list',
+    'localized element (: localized)',
+    'association redirection (: redirected to <target>)',
+    'view where / group by / having clauses',
     'projection view (as projection on <source>)',
   ],
 };

@@ -55,20 +55,17 @@ export const joinsCoverage: GrammarCoverage = {
     'parameter binding to a view parameter (:P_Param)',
     'parameter binding to a system variable ($session.client, $parameters.P_X)',
     'parameter binding to a literal',
-    'ON condition with AND / OR predicates',
+    'ON condition with AND / OR / NOT predicates',
     'ON condition with parentheses and nested call arguments',
     'ON condition with `is null` / `is not initial` predicates',
     'ON condition with a system variable ($projection.Field)',
+    'ON condition with LIKE / BETWEEN / IN predicates',
+    'ON condition with arithmetic operands (B.k + 1 = A.k)',
+    'join cardinality ([INNER] TO ONE|MANY JOIN, MANY TO ONE JOIN, ...)',
+    'grouped joins ((A join B on ...) left join C on ...)',
 
-    // --- known limitations (rejected by the parser) ---
+    // --- rejected by the parser ---
     'CROSS JOIN with an ON condition',
     'INNER / LEFT / RIGHT / FULL JOIN without an ON condition',
-    'NOT in an ON predicate',
-    'LIKE in an ON predicate',
-    'arithmetic operand in an ON predicate (B.k + 1)',
-
-    // --- not yet verified ---
-    'BETWEEN in an ON predicate',
-    'IN in an ON predicate',
   ],
 };

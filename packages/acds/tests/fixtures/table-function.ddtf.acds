@@ -1,0 +1,13 @@
+@EndUserText.label: 'AMDP table function'
+define table function Z_SALES_TF
+  with parameters
+    @EndUserText.label: 'Client'
+    p_clnt : abap.clnt,
+    p_lang : abap.lang default 'E'
+returns
+{
+  client     : abap.clnt;
+  salesorder : abap.char(10);
+  amount     : abap.dec(15, 2);
+}
+implemented by method zcl_sales_amdp=>read_orders;

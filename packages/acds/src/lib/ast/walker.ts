@@ -13,43 +13,73 @@ import type {
   CdsDefinition,
   CdsSourceFile,
   CustomEntityDefinition,
+  ExtensionDefinition,
+  ExternalEntityDefinition,
   FieldDefinition,
+  HierarchyDefinition,
   JoinClause,
   ParameterDefinition,
+  ScalarFunctionDefinition,
   StructureDefinition,
   TableDefinition,
+  TableFunctionDefinition,
   ViewElement,
   ViewEntityDefinition,
   ViewMember,
 } from '../../ast';
 
 export type WithMembers =
-  ViewEntityDefinition | AbstractEntityDefinition | CustomEntityDefinition;
+  | ViewEntityDefinition
+  | AbstractEntityDefinition
+  | CustomEntityDefinition
+  | HierarchyDefinition
+  | ExtensionDefinition;
 
-export type WithFields = TableDefinition | StructureDefinition;
+export type WithFields =
+  | TableDefinition
+  | StructureDefinition
+  | ExternalEntityDefinition
+  | TableFunctionDefinition;
 
 export type WithParameters =
-  ViewEntityDefinition | AbstractEntityDefinition | CustomEntityDefinition;
+  | ViewEntityDefinition
+  | AbstractEntityDefinition
+  | CustomEntityDefinition
+  | ExternalEntityDefinition
+  | TableFunctionDefinition
+  | ScalarFunctionDefinition
+  | HierarchyDefinition;
 
 /** True when the definition has a `members` array (view-like entities). */
 export function hasMembers(def: CdsDefinition): def is WithMembers {
   return (
     def.kind === 'viewEntity' ||
     def.kind === 'abstractEntity' ||
-    def.kind === 'customEntity'
+    def.kind === 'customEntity' ||
+    def.kind === 'hierarchy' ||
+    def.kind === 'extension'
   );
 }
 
 /** True when the definition has a `members` array of typed fields (TABL/structure). */
 export function hasFields(def: CdsDefinition): def is WithFields {
-  return def.kind === 'table' || def.kind === 'structure';
+  return (
+    def.kind === 'table' ||
+    def.kind === 'structure' ||
+    def.kind === 'externalEntity' ||
+    def.kind === 'tableFunction'
+  );
 }
 
 export function hasParameters(def: CdsDefinition): def is WithParameters {
   return (
     def.kind === 'viewEntity' ||
     def.kind === 'abstractEntity' ||
-    def.kind === 'customEntity'
+    def.kind === 'customEntity' ||
+    def.kind === 'externalEntity' ||
+    def.kind === 'tableFunction' ||
+    def.kind === 'scalarFunction' ||
+    def.kind === 'hierarchy'
   );
 }
 
@@ -82,6 +112,16 @@ export function* walkAnnotations(file: CdsSourceFile): Iterable<Annotation> {
         for (const a of p.annotations) yield a;
       }
     }
+    if (def.kind === 'aspect') {
+      for (const m of def.members) {
+        for (const a of m.annotations) yield a;
+      }
+    }
+    if (def.kind === 'extension') {
+      for (const a of def.associations) {
+        for (const an of a.annotations) yield an;
+      }
+    }
   }
 }
 
@@ -112,6 +152,11 @@ export function* walkAssociations(
     for (const m of def.members) {
       if (!isAssociation(m)) continue;
       yield { owner: def, association: m };
+    }
+    if (def.kind === 'extension') {
+      for (const a of def.associations) {
+        yield { owner: def, association: a };
+      }
     }
   }
 }

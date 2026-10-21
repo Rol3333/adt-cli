@@ -20,8 +20,7 @@ describe('parser limits', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('rejects NOT in an ON predicate', () => {
-    // Known limitation — the expression grammar has no NOT support.
+  it('accepts NOT in an ON predicate', () => {
     expect(
       errorCount(`
         define view entity V as select from A
@@ -30,11 +29,10 @@ describe('parser limits', () => {
           A.ID
         }
       `),
-    ).toBeGreaterThan(0);
+    ).toBe(0);
   });
 
-  it('rejects LIKE in an ON predicate', () => {
-    // Known limitation — the expression grammar has no LIKE support.
+  it('accepts LIKE in an ON predicate', () => {
     expect(
       errorCount(`
         define view entity V as select from A
@@ -43,11 +41,10 @@ describe('parser limits', () => {
           A.ID
         }
       `),
-    ).toBeGreaterThan(0);
+    ).toBe(0);
   });
 
-  it('rejects an arithmetic operand in an ON predicate', () => {
-    // Known limitation — the expression grammar has no arithmetic support.
+  it('accepts an arithmetic operand in an ON predicate', () => {
     expect(
       errorCount(`
         define view entity V as select from A
@@ -56,10 +53,10 @@ describe('parser limits', () => {
           A.ID
         }
       `),
-    ).toBeGreaterThan(0);
+    ).toBe(0);
   });
 
-  it('does not silently truncate a rejected ON condition', () => {
+  it('captures the complete ON condition including arithmetic', () => {
     const r = parse(`
       define view entity V as select from A
         join B on B.k + 1 = A.k
@@ -68,13 +65,12 @@ describe('parser limits', () => {
       }
     `);
 
-    expect(r.errors.length).toBeGreaterThan(0);
+    expect(r.errors).toHaveLength(0);
 
-    // The condition must not be reported as a complete, valid predicate.
     const view = r.ast.definitions[0] as {
       joins?: Array<{ on?: { source: string } }>;
     };
     const on = view.joins?.[0]?.on?.source ?? '';
-    expect(on).not.toContain('+ 1');
+    expect(on).toContain('+ 1');
   });
 });

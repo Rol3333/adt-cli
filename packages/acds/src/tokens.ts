@@ -371,14 +371,564 @@ export const Outer = createToken({
   longer_alt: Identifier,
 });
 
+// ---- SELECT clauses & set operators -------------------------------------
+
+export const Distinct = createToken({
+  name: 'Distinct',
+  pattern: keyword('distinct'),
+  longer_alt: Identifier,
+});
+
+export const Union = createToken({
+  name: 'Union',
+  pattern: keyword('union'),
+  longer_alt: Identifier,
+});
+
+export const Intersect = createToken({
+  name: 'Intersect',
+  pattern: keyword('intersect'),
+  longer_alt: Identifier,
+});
+
+export const Except = createToken({
+  name: 'Except',
+  pattern: keyword('except'),
+  longer_alt: Identifier,
+});
+
+export const Allowed = createToken({
+  name: 'Allowed',
+  pattern: keyword('allowed'),
+  longer_alt: Identifier,
+});
+
+/** NOTE: `allowed` must precede `all` (`all` is a prefix of `allowed`). */
+export const All = createToken({
+  name: 'All',
+  pattern: keyword('all'),
+  longer_alt: Identifier,
+});
+
+export const Group = createToken({
+  name: 'Group',
+  pattern: keyword('group'),
+  longer_alt: Identifier,
+});
+
+export const Having = createToken({
+  name: 'Having',
+  pattern: keyword('having'),
+  longer_alt: Identifier,
+});
+
+// ---- Entity modifiers ----------------------------------------------------
+
+export const Root = createToken({
+  name: 'Root',
+  pattern: keyword('root'),
+  longer_alt: Identifier,
+});
+
+export const Writable = createToken({
+  name: 'Writable',
+  pattern: keyword('writable'),
+  longer_alt: Identifier,
+});
+
+export const Switchable = createToken({
+  name: 'Switchable',
+  pattern: keyword('switchable'),
+  longer_alt: Identifier,
+});
+
+// ---- Cardinality words & association flavours ----------------------------
+
+export const Exact = createToken({
+  name: 'Exact',
+  pattern: keyword('exact'),
+  longer_alt: Identifier,
+});
+
+export const Parents = createToken({
+  name: 'Parents',
+  pattern: keyword('parents'),
+  longer_alt: Identifier,
+});
+
+export const Parent = createToken({
+  name: 'Parent',
+  pattern: keyword('parent'),
+  longer_alt: Identifier,
+});
+
+export const Child = createToken({
+  name: 'Child',
+  pattern: keyword('child'),
+  longer_alt: Identifier,
+});
+
+export const Localized = createToken({
+  name: 'Localized',
+  pattern: keyword('localized'),
+  longer_alt: Identifier,
+});
+
+export const Redefine = createToken({
+  name: 'Redefine',
+  pattern: keyword('redefine'),
+  longer_alt: Identifier,
+});
+
+export const Redefinition = createToken({
+  name: 'Redefinition',
+  pattern: keyword('redefinition'),
+  longer_alt: Identifier,
+});
+
+export const Filter = createToken({
+  name: 'Filter',
+  pattern: keyword('filter'),
+  longer_alt: Identifier,
+});
+
+export const Bind = createToken({
+  name: 'Bind',
+  pattern: keyword('bind'),
+  longer_alt: Identifier,
+});
+
+// ---- Functions -----------------------------------------------------------
+
+export const Function = createToken({
+  name: 'Function',
+  pattern: keyword('function'),
+  longer_alt: Identifier,
+});
+
+export const Returns = createToken({
+  name: 'Returns',
+  pattern: keyword('returns'),
+  longer_alt: Identifier,
+});
+
+export const Implemented = createToken({
+  name: 'Implemented',
+  pattern: keyword('implemented'),
+  longer_alt: Identifier,
+});
+
+export const Method = createToken({
+  name: 'Method',
+  pattern: keyword('method'),
+  longer_alt: Identifier,
+});
+
+export const Scalar = createToken({
+  name: 'Scalar',
+  pattern: keyword('scalar'),
+  longer_alt: Identifier,
+});
+
+// ---- Further entity kinds ------------------------------------------------
+
+export const Hierarchy = createToken({
+  name: 'Hierarchy',
+  pattern: keyword('hierarchy'),
+  longer_alt: Identifier,
+});
+
+export const Aspect = createToken({
+  name: 'Aspect',
+  pattern: keyword('aspect'),
+  longer_alt: Identifier,
+});
+
+export const AnnotationKeyword = createToken({
+  name: 'AnnotationKeyword',
+  pattern: keyword('annotation'),
+  longer_alt: Identifier,
+});
+
+export const Extend = createToken({
+  name: 'Extend',
+  pattern: keyword('extend'),
+  longer_alt: Identifier,
+});
+
+export const Accesspolicy = createToken({
+  name: 'Accesspolicy',
+  pattern: keyword('accesspolicy'),
+  longer_alt: Identifier,
+});
+
+export const External = createToken({
+  name: 'External',
+  pattern: keyword('external'),
+  longer_alt: Identifier,
+});
+
+export const Provider = createToken({
+  name: 'Provider',
+  pattern: keyword('provider'),
+  longer_alt: Identifier,
+});
+
+export const Contract = createToken({
+  name: 'Contract',
+  pattern: keyword('contract'),
+  longer_alt: Identifier,
+});
+
+export const Name = createToken({
+  name: 'Name',
+  pattern: keyword('name'),
+  longer_alt: Identifier,
+});
+
+export const Federated = createToken({
+  name: 'Federated',
+  pattern: keyword('federated'),
+  longer_alt: Identifier,
+});
+
+export const Data = createToken({
+  name: 'Data',
+  pattern: keyword('data'),
+  longer_alt: Identifier,
+});
+
+export const Provided = createToken({
+  name: 'Provided',
+  pattern: keyword('provided'),
+  longer_alt: Identifier,
+});
+
+export const AtKeyword = createToken({
+  name: 'AtKeyword',
+  pattern: keyword('at'),
+  longer_alt: Identifier,
+});
+
+export const Runtime = createToken({
+  name: 'Runtime',
+  pattern: keyword('runtime'),
+  longer_alt: Identifier,
+});
+
+// ---- CASE expressions ----------------------------------------------------
+
+export const Case = createToken({
+  name: 'Case',
+  pattern: keyword('case'),
+  longer_alt: Identifier,
+});
+
+export const When = createToken({
+  name: 'When',
+  pattern: keyword('when'),
+  longer_alt: Identifier,
+});
+
+export const Then = createToken({
+  name: 'Then',
+  pattern: keyword('then'),
+  longer_alt: Identifier,
+});
+
+export const Else = createToken({
+  name: 'Else',
+  pattern: keyword('else'),
+  longer_alt: Identifier,
+});
+
+export const End = createToken({
+  name: 'End',
+  pattern: keyword('end'),
+  longer_alt: Identifier,
+});
+
+// ---- Condition operators -------------------------------------------------
+
+export const Like = createToken({
+  name: 'Like',
+  pattern: keyword('like'),
+  longer_alt: Identifier,
+});
+
+export const Between = createToken({
+  name: 'Between',
+  pattern: keyword('between'),
+  longer_alt: Identifier,
+});
+
+export const Over = createToken({
+  name: 'Over',
+  pattern: keyword('over'),
+  longer_alt: Identifier,
+});
+
+export const Partition = createToken({
+  name: 'Partition',
+  pattern: keyword('partition'),
+  longer_alt: Identifier,
+});
+
+// ---- Hierarchy clauses ----------------------------------------------------
+
+export const Siblings = createToken({
+  name: 'Siblings',
+  pattern: keyword('siblings'),
+  longer_alt: Identifier,
+});
+
+export const Order = createToken({
+  name: 'Order',
+  pattern: keyword('order'),
+  longer_alt: Identifier,
+});
+
+export const Start = createToken({
+  name: 'Start',
+  pattern: keyword('start'),
+  longer_alt: Identifier,
+});
+
+export const Source = createToken({
+  name: 'Source',
+  pattern: keyword('source'),
+  longer_alt: Identifier,
+});
+
+export const Directory = createToken({
+  name: 'Directory',
+  pattern: keyword('directory'),
+  longer_alt: Identifier,
+});
+
+export const Period = createToken({
+  name: 'Period',
+  pattern: keyword('period'),
+  longer_alt: Identifier,
+});
+
+export const Valid = createToken({
+  name: 'Valid',
+  pattern: keyword('valid'),
+  longer_alt: Identifier,
+});
+
+export const Depth = createToken({
+  name: 'Depth',
+  pattern: keyword('depth'),
+  longer_alt: Identifier,
+});
+
+export const Nodetype = createToken({
+  name: 'Nodetype',
+  pattern: keyword('nodetype'),
+  longer_alt: Identifier,
+});
+
+export const Load = createToken({
+  name: 'Load',
+  pattern: keyword('load'),
+  longer_alt: Identifier,
+});
+
+export const Multiple = createToken({
+  name: 'Multiple',
+  pattern: keyword('multiple'),
+  longer_alt: Identifier,
+});
+
+export const Orphans = createToken({
+  name: 'Orphans',
+  pattern: keyword('orphans'),
+  longer_alt: Identifier,
+});
+
+export const Cycles = createToken({
+  name: 'Cycles',
+  pattern: keyword('cycles'),
+  longer_alt: Identifier,
+});
+
+export const Generate = createToken({
+  name: 'Generate',
+  pattern: keyword('generate'),
+  longer_alt: Identifier,
+});
+
+export const Spantree = createToken({
+  name: 'Spantree',
+  pattern: keyword('spantree'),
+  longer_alt: Identifier,
+});
+
+export const Cache = createToken({
+  name: 'Cache',
+  pattern: keyword('cache'),
+  longer_alt: Identifier,
+});
+
+export const Bulk = createToken({
+  name: 'Bulk',
+  pattern: keyword('bulk'),
+  longer_alt: Identifier,
+});
+
+export const Incremental = createToken({
+  name: 'Incremental',
+  pattern: keyword('incremental'),
+  longer_alt: Identifier,
+});
+
+export const Leaves = createToken({
+  name: 'Leaves',
+  pattern: keyword('leaves'),
+  longer_alt: Identifier,
+});
+
+export const Only = createToken({
+  name: 'Only',
+  pattern: keyword('only'),
+  longer_alt: Identifier,
+});
+
+export const Ascending = createToken({
+  name: 'Ascending',
+  pattern: keyword('ascending'),
+  longer_alt: Identifier,
+});
+
+export const Descending = createToken({
+  name: 'Descending',
+  pattern: keyword('descending'),
+  longer_alt: Identifier,
+});
+
+export const Error = createToken({
+  name: 'Error',
+  pattern: keyword('error'),
+  longer_alt: Identifier,
+});
+
+export const Ignore = createToken({
+  name: 'Ignore',
+  pattern: keyword('ignore'),
+  longer_alt: Identifier,
+});
+
+export const Breakup = createToken({
+  name: 'Breakup',
+  pattern: keyword('breakup'),
+  longer_alt: Identifier,
+});
+
+export const Force = createToken({
+  name: 'Force',
+  pattern: keyword('force'),
+  longer_alt: Identifier,
+});
+
+/** `FOR` — must be listed AFTER `Force` (`for` is a prefix of `force`). */
+export const For = createToken({
+  name: 'For',
+  pattern: keyword('for'),
+  longer_alt: Identifier,
+});
+
+export const By = createToken({
+  name: 'By',
+  pattern: keyword('by'),
+  longer_alt: Identifier,
+});
+
+/** `OFF` — must be listed BEFORE `Of` (`of` is a prefix of `off`). */
+export const Off = createToken({
+  name: 'Off',
+  pattern: keyword('off'),
+  longer_alt: Identifier,
+});
+
+// ---- DCL additions ---------------------------------------------------------
+
+export const Inheriting = createToken({
+  name: 'Inheriting',
+  pattern: keyword('inheriting'),
+  longer_alt: Identifier,
+});
+
+export const Inherit = createToken({
+  name: 'Inherit',
+  pattern: keyword('inherit'),
+  longer_alt: Identifier,
+});
+
+export const Conditions = createToken({
+  name: 'Conditions',
+  pattern: keyword('conditions'),
+  longer_alt: Identifier,
+});
+
+export const Super = createToken({
+  name: 'Super',
+  pattern: keyword('super'),
+  longer_alt: Identifier,
+});
+
+export const Void = createToken({
+  name: 'Void',
+  pattern: keyword('void'),
+  longer_alt: Identifier,
+});
+
+export const Combination = createToken({
+  name: 'Combination',
+  pattern: keyword('combination'),
+  longer_alt: Identifier,
+});
+
+export const Mode = createToken({
+  name: 'Mode',
+  pattern: keyword('mode'),
+  longer_alt: Identifier,
+});
+
+export const Optional = createToken({
+  name: 'Optional',
+  pattern: keyword('optional'),
+  longer_alt: Identifier,
+});
+
+export const Elements = createToken({
+  name: 'Elements',
+  pattern: keyword('elements'),
+  longer_alt: Identifier,
+});
+
+/**
+ * `IN` — must be listed AFTER every `in*` keyword (`inner`, `intersect`,
+ * `include`, `inherit`, `inheriting`, `incremental`), because `in` is a
+ * prefix of all of them.
+ */
+export const In = createToken({
+  name: 'In',
+  pattern: keyword('in'),
+  longer_alt: Identifier,
+});
+
 // Operators for simple expressions inside where-clauses / associations
 export const EqEq = createToken({ name: 'EqEq', pattern: /==/ });
+export const FatArrow = createToken({ name: 'FatArrow', pattern: /=>/ });
 export const Eq = createToken({ name: 'Eq', pattern: /=/ });
 export const NotEq = createToken({ name: 'NotEq', pattern: /!=|<>/ });
 export const LtEq = createToken({ name: 'LtEq', pattern: /<=/ });
 export const GtEq = createToken({ name: 'GtEq', pattern: />=/ });
 export const Lt = createToken({ name: 'Lt', pattern: /</ });
 export const Gt = createToken({ name: 'Gt', pattern: />/ });
+export const Quest = createToken({ name: 'Quest', pattern: /\?/ });
 
 export const And = createToken({
   name: 'And',
@@ -419,6 +969,155 @@ export const Slash = createToken({ name: 'Slash', pattern: /\// });
 // Keywords must come before Identifier
 // ============================================
 
+/**
+ * All keyword tokens. Exported so the parser can derive its name-token set
+ * (every keyword may legally appear as an identifier in CDS).
+ */
+export const keywordTokens = [
+  // NOTE: longer keywords that share a prefix with shorter ones (e.g.
+  // `association` starts with `as`, `one` starts with `on`, `in` is a
+  // prefix of `inner`) MUST be listed before the shorter keyword otherwise
+  // Chevrotain's lexer will complain that they are unreachable.
+  Association,
+  Composition,
+  Abstract,
+  Annotate,
+  AnnotationKeyword,
+  Accesspolicy,
+  Ascending,
+  Aspect,
+  Allowed,
+  As,
+  Define,
+  Table,
+  Structure,
+  Type,
+  Service,
+  Expose,
+  Entity,
+  With,
+  Key,
+  Not,
+  Null,
+  Include,
+  Suffix,
+  True,
+  False,
+  Abap,
+  One,
+  // NOTE: `Only` must precede `On` (`on` is a prefix of `only`).
+  Only,
+  View,
+  Projection,
+  Select,
+  From,
+  On,
+  To,
+  Many,
+  // NOTE: `Off` must precede `Of` (`of` is a prefix of `off`).
+  Off,
+  Of,
+  Parameters,
+  Role,
+  Grant,
+  Where,
+  Custom,
+  Virtual,
+  Redirected,
+  Redefine,
+  Redefinition,
+  Default,
+  Distinct,
+  Union,
+  Intersect,
+  Except,
+  All,
+  Group,
+  Having,
+  Root,
+  Writable,
+  Switchable,
+  Exact,
+  Parents,
+  Parent,
+  Child,
+  Localized,
+  Filter,
+  Bind,
+  Function,
+  Returns,
+  Implemented,
+  Method,
+  Scalar,
+  Hierarchy,
+  Extend,
+  External,
+  Provider,
+  Provided,
+  Contract,
+  Name,
+  Federated,
+  Data,
+  AtKeyword,
+  Runtime,
+  Case,
+  When,
+  Then,
+  Else,
+  End,
+  Like,
+  Between,
+  Over,
+  Partition,
+  Siblings,
+  Order,
+  Orphans,
+  Optional,
+  Start,
+  Source,
+  Directory,
+  Period,
+  Valid,
+  Depth,
+  Nodetype,
+  Load,
+  Multiple,
+  Cycles,
+  Generate,
+  Spantree,
+  Cache,
+  Bulk,
+  Incremental,
+  Leaves,
+  Descending,
+  Error,
+  Ignore,
+  Breakup,
+  Force,
+  For,
+  By,
+  Conditions,
+  Inheriting,
+  Inherit,
+  Super,
+  Void,
+  Combination,
+  Mode,
+  Elements,
+  Join,
+  Inner,
+  Left,
+  Right,
+  Cross,
+  Full,
+  // NOTE: `Outer`/`Order`/`Orphans`/`Optional` must precede `Or`.
+  Outer,
+  And,
+  Or,
+  // NOTE: `In` must come after every `in*` keyword.
+  In,
+];
+
 export const allTokens = [
   // Whitespace & comments (skipped)
   WhiteSpace,
@@ -432,58 +1131,7 @@ export const allTokens = [
   EnumLiteral,
 
   // Keywords (before Identifier!)
-  // NOTE: longer keywords that share a prefix with shorter ones (e.g.
-  // `association` starts with `as`, `one` starts with `on`) MUST be listed
-  // before the shorter keyword otherwise Chevrotain's lexer will complain
-  // that they are unreachable.
-  Association,
-  Composition,
-  Abstract,
-  Annotate,
-  Define,
-  Table,
-  Structure,
-  Type,
-  Service,
-  Expose,
-  Entity,
-  With,
-  Key,
-  Not,
-  Null,
-  As,
-  Include,
-  Suffix,
-  True,
-  False,
-  Abap,
-  One,
-  View,
-  Projection,
-  Select,
-  From,
-  On,
-  To,
-  Many,
-  Of,
-  Parameters,
-  Role,
-  Grant,
-  Where,
-  Custom,
-  Virtual,
-  Redirected,
-  Default,
-  Join,
-  Inner,
-  Left,
-  Right,
-  Cross,
-  Full,
-  // NOTE: `Outer` must precede `Or` ("or" is a prefix of "outer").
-  Outer,
-  And,
-  Or,
+  ...keywordTokens,
 
   // Identifier (catch-all for names)
   Identifier,
@@ -493,6 +1141,7 @@ export const allTokens = [
   NotEq,
   LtEq,
   GtEq,
+  FatArrow,
 
   // Symbols
   At,
@@ -510,6 +1159,7 @@ export const allTokens = [
   Eq,
   Lt,
   Gt,
+  Quest,
   Star,
   Plus,
   Minus,

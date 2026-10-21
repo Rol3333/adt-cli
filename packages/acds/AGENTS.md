@@ -6,7 +6,7 @@
 
 | Feature                 | Description                                                             |
 | ----------------------- | ----------------------------------------------------------------------- |
-| **Chevrotain**          | Lexer + CstParser + visitor pattern (LL(4))                             |
+| **Chevrotain**          | Lexer + CstParser + visitor pattern (LL(2) + explicit gates)            |
 | **Error recovery**      | Returns partial AST + structured errors                                 |
 | **Construct-scoped**    | Grammar topics live under `src/lib/grammar/` (docs + coverage metadata) |
 | **AST walker**          | `walkDefinitions`, `walkAnnotations`, `walkAssociations`, ...           |
@@ -15,16 +15,16 @@
 
 ## Grammar coverage
 
-| Topic          | Constructs                                                                                                                                                                             |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ddl`          | `define table`, `define structure`, `define type`, `define view entity`, `define view` (legacy), `define abstract entity`, `define custom entity`, `define service`, `annotate entity` |
-| `dcl`          | `define role … { grant select on <entity> [where …] }`                                                                                                                                 |
-| `annotations`  | `@Key`, `@Key:value`, arrays, nested objects, dotted property keys                                                                                                                     |
-| `associations` | `association`, `composition`, cardinality `[L..U]` / `[*]` / `[N]`, `of many/one`, `redirected to`, `on <expr>`, `as <alias>`                                                          |
-| `joins`        | `JOIN` / `INNER JOIN` / `LEFT [OUTER] JOIN` / `RIGHT [OUTER] JOIN` / `FULL [OUTER] JOIN` / `CROSS JOIN`, chained joins, parameterized sources, `ON <expr>`                             |
-| `parameters`   | `with parameters p : <type> [default <literal>]`, annotated parameters                                                                                                                 |
-| `projections`  | key / virtual / redirected modifiers, typed fields (abstract/custom entities), `where` clauses                                                                                         |
-| `actions`      | _placeholder — owned by E10 (BDEF)_                                                                                                                                                    |
+| Topic          | Constructs                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ddl`          | `define table`, `define structure`, `define type`, `define [root] view entity` (select + projection), `define view` (legacy), `define abstract/custom entity`, `define table entity`, `define external entity`, `define table function`, `define scalar function`, `define hierarchy`, `define aspect`, `define annotation`, `define accesspolicy`, `define service`, `annotate entity`, `extend view/entity` |
+| `dcl`          | `define role [switchable] … { grant select … [with optional elements] [combination mode] [where …]; inherit …; inheriting conditions … }`                                                                                                                                                                                                                                                                     |
+| `annotations`  | `@Key`, `@Key:value`, arrays, nested objects, dotted property keys                                                                                                                                                                                                                                                                                                                                            |
+| `associations` | `association`, `composition`, cardinality `[L..U]` / `[*]` / `[N]`, `of many/one`, `to parent`, `redirected to`, `on <expr>`, `as <alias>`, `with default filter`, `bind aspect`                                                                                                                                                                                                                              |
+| `joins`        | `JOIN` / `INNER` / `LEFT                                                                                                                                                                                                                                                                                                                                                                                      | RIGHT | FULL [OUTER] JOIN`/`CROSS JOIN`, word cardinalities (`many to one join`, `to one join`), grouped joins, chained joins, parameterized sources, `ON <expr>` |
+| `parameters`   | `with parameters p : <type> [default <literal>]`, annotated parameters                                                                                                                                                                                                                                                                                                                                        |
+| `projections`  | key / virtual / redirected modifiers, typed fields, `localized`, `redirected to`, case expressions, arithmetic, casts, calls, paths, `distinct`, `where` / `group by` / `having`, `union`/`intersect`/`except`                                                                                                                                                                                                |
+| `actions`      | _placeholder — owned by E10 (BDEF)_                                                                                                                                                                                                                                                                                                                                                                           |
 
 The coverage metadata is exported at runtime via `GRAMMAR_COVERAGE` for tooling / docs.
 
@@ -96,7 +96,7 @@ CDS sources commonly use keywords as identifiers (e.g. `@ObjectModel.association
 ### Parser Rules
 
 - `recoveryEnabled: true` — malformed input produces partial CST + errors
-- `maxLookahead: 4` — keep grammar LL(4) compatible
+- `maxLookahead: 2` — deeper lookaheads use explicit `GATE:` predicates
 - The singleton `cdsParser` instance is reused across calls.
 
 ### Expressions
@@ -106,7 +106,7 @@ CDS sources commonly use keywords as identifiers (e.g. `@ObjectModel.association
 1. Parse the token stream themselves; or
 2. Wait for the expression grammar to be expanded (tracked as open question in the epic).
 
-The condition grammar accepts comparisons, `AND` / `OR` chains, parenthesized sub-conditions, call arguments (`coalesce(a, b)`), `is null` / `is not initial` predicates and system variables (`$session.client`, `$parameters.P_X`, `$projection.Field`). The capture is complete — it is **not** truncated at boolean operators, commas or parentheses.
+The condition grammar accepts comparisons, `AND` / `OR` / `NOT` chains, parenthesized sub-conditions, call arguments (`coalesce(a, b)`), `is null` / `is not initial` predicates, `like`, `between`, `in (...)`, arithmetic operands and system variables (`$session.client`, `$parameters.P_X`, `$projection.Field`). The capture is complete — it is **not** truncated at boolean operators, commas or parentheses.
 
 ### Projection elements
 
@@ -116,9 +116,12 @@ A projection element is one of
 <path> [as <alias>]                                       -- zi.PurchaseRequisition
 <func>( <arg>, ... ) [as <alias>]                        -- coalesce(a, b), sum(x)
 cast( <value> as <type> [preserving type] ) [as <alias>]  -- cast(0 as abap.curr(15,2))
+case <op> when ... then ... else ... end                    -- operand and searched forms
+<operand> <arith-op> <operand> ...                          -- a + b * 2
+<path> : localized | <assoc> : redirected to <target>       -- projection suffixes
 ```
 
-The expression text is preserved verbatim (reformatted only in whitespace). `CASE … END` and arithmetic between operands are **not** supported yet.
+The expression text is preserved verbatim (reformatted only in whitespace).
 
 ### View flavours
 
@@ -180,7 +183,7 @@ Tests live in:
 - `tests/walker.test.ts` — AST traversal helpers
 - `tests/validate.test.ts` — semantic validators
 
-**168 tests, 14 real-world fixtures** (from `git_modules/abap-file-formats` and hand-crafted).
+**208+ tests, 17 real-world fixtures** (from `git_modules/abap-file-formats` and hand-crafted).
 
 ## Dependencies
 
