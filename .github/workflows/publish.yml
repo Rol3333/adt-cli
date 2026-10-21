@@ -219,21 +219,43 @@ jobs:
             return prevCache.get(root);
           };
           const SECS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+          const onNpm = (name, ver) => {
+            try {
+              execSync(`npm view ${name}@${ver} version`, { encoding: 'utf8', stdio: 'pipe' });
+              return true;
+            } catch { return false; }
+          };
+          // The npm version each project ends up at: affected → the bumped
+          // disk version; unaffected → its previous version if that one is
+          // really on the registry (nx skips it), else the bumped disk
+          // version (publishes fresh to backfill the missing release).
+          const finalVer = new Map();
+          for (const [name, { pkg, root }] of proj) {
+            const prev = prevJson(root);
+            const skipped = !affected.has(name) && prev && onNpm(pkg.name, prev.version);
+            finalVer.set(name, skipped ? prev.version : pkg.version);
+          }
           for (const [name, { root, pkg }] of proj) {
             const prev = prevJson(root);
             if (!affected.has(name)) {
-              if (prev) {
+              // Only restore the previous manifest if that version is ACTUALLY
+              // on the registry — otherwise nx would happily publish a stale
+              // tarball whose dep pins point at versions that never shipped
+              // (see v0.4.18: adk@0.4.17 pinned adt-client@0.4.16, which was
+              // never published, breaking the whole install tree).
+              if (prev && finalVer.get(name) === prev.version) {
                 fs.writeFileSync(`${root}/package.json`, JSON.stringify(prev, null, 2) + '\n');
-                console.log(`restored ${name} -> ${prev.version} (already published, will be skipped)`);
+                console.log(`restored ${name} -> ${prev.version} (on npm, will be skipped)`);
+                continue;
               }
-              continue;
+              console.log(`keep ${name} -> ${pkg.version} (prev ${prev?.version ?? '?'} missing on npm — publishing)`);
             }
             let changed = false;
             for (const s of SECS) {
               for (const dep of Object.keys(pkg[s] || {})) {
                 const dp = projOfPkg.get(dep);
-                if (!dp || affected.has(dp)) continue;
-                const wanted = prev?.[s]?.[dep] ?? prevJson(proj.get(dp).root)?.version;
+                if (!dp) continue;
+                const wanted = finalVer.get(dp);
                 if (wanted && wanted !== pkg[s][dep]) {
                   console.log(`${name}: pin ${dep} ${pkg[s][dep]} -> ${wanted}`);
                   pkg[s][dep] = wanted;

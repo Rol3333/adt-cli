@@ -159,7 +159,12 @@ jobs:
       - name: Push commit and tags
         if: ${{ !inputs.dry_run && steps.get_tags.outputs.tags != '' }}
         run: |
-          git push origin HEAD:main
+          git fetch origin main
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "origin/main already contains the release commit — skipping push"
+          else
+            git push origin HEAD:main
+          fi
           git push --tags
 
       - name: Enrich release notes with PR authors
