@@ -62,6 +62,18 @@ View entities expose the whole FROM region:
 - `DataSource.parameters` — the bindings of a parameterized source, e.g.
   `:P_StartDate`, `$session.client` or a literal.
 
+Join syntax:
+
+- the `ON` condition is required for `[INNER] JOIN`, `LEFT OUTER JOIN` and
+  `RIGHT OUTER JOIN`, and not allowed for `CROSS JOIN`,
+- a view entity requires `LEFT OUTER JOIN` / `RIGHT OUTER JOIN`; the legacy
+  `define view` also accepts `LEFT JOIN` / `RIGHT JOIN` (unverified legacy
+  rule),
+- `FULL OUTER JOIN` is not part of the ABAP CDS DDL join syntax.
+
+Keywords are matched case-insensitively — `DEFINE VIEW ENTITY` and
+`define view entity` both parse, and identifiers keep their original spelling.
+
 ## Usage
 
 ```ts

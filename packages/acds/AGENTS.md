@@ -80,8 +80,12 @@ TypeRef     = BuiltinTypeRef  | NamedTypeRef
 In `tokens.ts`:
 
 1. Keywords **must** come before `Identifier` in `allTokens`.
-2. Keywords that share a prefix with other keywords (e.g. `association` / `as`, `one` / `on`) **must** be listed before the shorter keyword — otherwise Chevrotain reports the longer one as unreachable.
+2. Keywords that share a prefix with other keywords (e.g. `association` / `as`, `one` / `on`, `outer` / `or`) **must** be listed before the shorter keyword — otherwise Chevrotain reports the longer one as unreachable.
 3. Multi-character operators (`==`, `!=`, `<=`, `>=`) must precede their single-character equivalents.
+
+### Keyword Case
+
+Keyword patterns are **case-insensitive** (built by the shared `keyword()` helper), because ABAP CDS sources are written in upper, lower or mixed case. The token image keeps the original spelling, so identifiers keep their case in the AST (`A.Left` stays `A.Left`).
 
 ### `cdsName` vs keywords
 
@@ -133,6 +137,19 @@ as select from I_Item as _Item
 - joins land in `ViewEntityDefinition.joins` (ordered, `joinType` normalized),
 - FROM associations land in `ViewEntityDefinition.fromAssociations` (kept apart from the element-list associations in `members`),
 - parameterized sources carry `DataSource.parameters` with the raw binding text.
+
+### Join syntax rules
+
+- the `ON` condition is **required** for `[INNER] JOIN`, `LEFT OUTER JOIN` and
+  `RIGHT OUTER JOIN`, and **not allowed** for `CROSS JOIN` — enforced in the
+  grammar (`joinSource` vs. the cross-join alternative),
+- a **view entity** requires `LEFT OUTER JOIN` / `RIGHT OUTER JOIN`; the legacy
+  `define view` also accepts `LEFT JOIN` / `RIGHT JOIN` (compatibility — the
+  legacy rule is _unverified_, see `src/lib/grammar/joins.ts`),
+- `FULL OUTER JOIN` is not part of the ABAP CDS DDL join syntax,
+- the _bare_ (implicit) source alias may not be a FROM-region starter
+  (`association`, `composition`, `join`, `inner`, `left`, `right`, `cross`) — see
+  `CdsParser.FROM_REGION_STARTERS`. An explicit `as <alias>` is unrestricted.
 
 ## Consumers
 

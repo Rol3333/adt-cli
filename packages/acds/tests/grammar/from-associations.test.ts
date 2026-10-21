@@ -19,8 +19,8 @@ function cond(source: string | undefined): string {
 describe('FROM-clause associations', () => {
   it('parses an association declared in the FROM clause', () => {
     const v = getView(`
-      define view entity V as select from I_Purchaserequisitionitem as _Item
-        association [0..1] to ZI_MM_CMCDHDRLAST2 as _LastRelease
+      define view entity V as select from I_SampleItem as _Item
+        association [0..1] to ZTEST_LastRelease as _LastRelease
           on _LastRelease.PurchaseRequisition = _Item.PurchaseRequisition
       {
         key _Item.k
@@ -30,7 +30,7 @@ describe('FROM-clause associations', () => {
     expect(v.fromAssociations).toHaveLength(1);
     const a = v.fromAssociations?.[0] as AssociationDeclaration;
     expect(a.associationKind).toBe('association');
-    expect(a.target).toBe('ZI_MM_CMCDHDRLAST2');
+    expect(a.target).toBe('ZTEST_LastRelease');
     expect(a.alias).toBe('_LastRelease');
     expect(a.cardinality).toEqual({ min: 0, max: 1 });
     expect(cond(a.on?.source)).toBe(
@@ -40,8 +40,8 @@ describe('FROM-clause associations', () => {
 
   it('captures a $projection condition', () => {
     const v = getView(`
-      define view entity V as select from I_Purchaserequisitionitem as _Item
-        association [0..1] to I_Product as _Product
+      define view entity V as select from I_SampleItem as _Item
+        association [0..1] to I_SampleProduct as _Product
           on $projection.Product = _Product.Product
       {
         key _Item.k
@@ -54,8 +54,8 @@ describe('FROM-clause associations', () => {
 
   it('captures a multiline $projection condition', () => {
     const v = getView(`
-      define view entity V as select from I_Purchaserequisitionitem as _Item
-        association [0..1] to I_PurReqnAcctAssgmt as _Assgmt
+      define view entity V as select from I_SampleItem as _Item
+        association [0..1] to I_SampleAccountAssignment as _Assgmt
           on  $projection.PurchaseRequisition = _Assgmt.PurchaseRequisition
           and $projection.PurchaseRequisitionItem = _Assgmt.PurchaseRequisitionItem
           and _Assgmt.PurchaseReqnAcctAssgmtNumber = '01'
@@ -75,9 +75,9 @@ describe('FROM-clause associations', () => {
   it('parses several FROM associations', () => {
     const v = getView(`
       define view entity V as select from I_Item as _Item
-        association [0..1] to I_Product as _Product
+        association [0..1] to I_SampleProduct as _Product
           on $projection.Product = _Product.Product
-        association [0..1] to I_CompanyCode as _CompanyCode
+        association [0..1] to I_SampleCompanyCode as _CompanyCode
           on $projection.CompanyCode = _CompanyCode.CompanyCode
       {
         key _Item.k
@@ -86,8 +86,8 @@ describe('FROM-clause associations', () => {
 
     expect(v.fromAssociations).toHaveLength(2);
     expect(v.fromAssociations?.map((a) => a.target)).toEqual([
-      'I_Product',
-      'I_CompanyCode',
+      'I_SampleProduct',
+      'I_SampleCompanyCode',
     ]);
   });
 
@@ -95,7 +95,7 @@ describe('FROM-clause associations', () => {
     const v = getView(`
       define view entity V as select from I_Item as _Item
         left outer join ZI_Other as _Other on _Item.k = _Other.k
-        association [0..1] to I_Product as _Product
+        association [0..1] to I_SampleProduct as _Product
           on $projection.Product = _Product.Product
       {
         key _Item.k
@@ -105,13 +105,13 @@ describe('FROM-clause associations', () => {
     expect(v.joins).toHaveLength(1);
     expect(v.joins[0].joinType).toBe('leftOuter');
     expect(v.fromAssociations).toHaveLength(1);
-    expect(v.fromAssociations?.[0].target).toBe('I_Product');
+    expect(v.fromAssociations?.[0].target).toBe('I_SampleProduct');
   });
 
   it('keeps FROM associations apart from element list associations', () => {
     const v = getView(`
       define view entity V as select from I_Item as _Item
-        association [0..1] to I_Product as _Product
+        association [0..1] to I_SampleProduct as _Product
           on $projection.Product = _Product.Product
       {
         key _Item.k,
@@ -149,7 +149,7 @@ describe('FROM-clause associations', () => {
     // the parser records what was written.
     const v = getView(`
       define view entity V as select from I_Item as _Item
-        association [1..1] to I_Product as _Product
+        association [1..1] to I_SampleProduct as _Product
           on $projection.Product = _Product.Product
       {
         key _Item.k

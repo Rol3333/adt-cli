@@ -45,7 +45,7 @@ describe('legacy views and projection expressions', () => {
       define view ZC_Legacy
         with parameters
           P_StartDate : vdm_v_key_date
-      as select from ZC_Cube ( P_StartDate : :P_StartDate ) as _Cube
+      as select from ZTEST_SampleCube ( P_StartDate : :P_StartDate ) as _Cube
       {
         key _Cube.k
       }
@@ -170,10 +170,10 @@ describe('legacy views and projection expressions', () => {
     );
     const v = getView(fixture);
 
-    expect(v.name).toBe('ZC_PurReqItemQRY001');
+    expect(v.name).toBe('ZTEST_SampleQuery');
     expect(v.legacy).toBe(true);
     expect(v.parameters).toHaveLength(2);
-    expect(v.source.name).toBe('ZC_PurReqItemCube');
+    expect(v.source.name).toBe('ZTEST_SampleCube');
     expect(v.source.parameters).toHaveLength(2);
     expect(v.members).toHaveLength(6);
   });

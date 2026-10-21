@@ -1,43 +1,43 @@
-@AbapCatalog.sqlViewName: 'ZCMMPREQITMCUBE'
+@AbapCatalog.sqlViewName: 'ZTSAMPLECUBE'
 @AbapCatalog.compiler.compareFilter: true
 @AbapCatalog.preserveKey: true
 @AccessControl.authorizationCheck: #CHECK
 @AccessControl.personalData.blocking: #NOT_REQUIRED
 @VDM.viewType: #CONSUMPTION
 @ClientHandling.algorithm: #SESSION_VARIABLE
-@EndUserText.label: 'Purchase requisition item cube'
-define view entity ZC_PurReqItemCube
+@EndUserText.label: 'Sample item cube'
+define view entity ZTEST_SampleCube
   with parameters
-    P_StartDate : bedat,
-    P_EndDate   : bedat
-  as select from I_Purchaserequisitionitem as _Item
-    left outer join ZI_MMPurOrdInvAmtQty as _ZI_MMPurOrdInvAmtQty
-      on  _Item.PurchaseRequisition = _ZI_MMPurOrdInvAmtQty.PurchaseRequisition
-      and _Item.PurchaseRequisitionItem = _ZI_MMPurOrdInvAmtQty.PurchaseRequisitionItem
-    left outer join ZP_MM_PuReq_AprDat as _PRecApprovalDate
-      on _Item.PurchaseRequisition = _PRecApprovalDate.PurchaseRequisition
-    left outer join ZP_MM_PuReq_ClsDat as _PRecCloseDate
-      on _Item.PurchaseRequisition = _PRecCloseDate.PurchaseRequisition
-      and _Item.PurchaseRequisitionItem = _PRecCloseDate.PurchaseRequisitionItem
-      and _Item.IsClosed = _PRecCloseDate.IsClosed
-    left outer join ZP_MM_PR_DOC_TF
-      ( mandt: $session.client, p_startdate: $parameters.P_StartDate, p_enddate: $parameters.P_EndDate ) as _PRDocList
-      on _Item.PurchaseRequisition = _PRDocList.PurchaseRequisition
-      and _Item.PurchaseRequisitionItem = _PRDocList.PurchaseRequisitionItem
-    left outer join pa0105 as p1
+    P_StartDate : abap.dats,
+    P_EndDate   : abap.dats
+  as select from I_SampleItem as _Item
+    left outer join ZTEST_ItemAmounts as _Amounts
+      on  _Item.PurchaseRequisition = _Amounts.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _Amounts.PurchaseRequisitionItem
+    left outer join ZTEST_ApprovalView as _ApprovalDate
+      on _Item.PurchaseRequisition = _ApprovalDate.PurchaseRequisition
+    left outer join ZTEST_ClosureView as _ClosureDate
+      on _Item.PurchaseRequisition = _ClosureDate.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _ClosureDate.PurchaseRequisitionItem
+      and _Item.IsClosed = _ClosureDate.IsClosed
+    left outer join ZTEST_DocumentView
+      ( mandt: $session.client, p_startdate: $parameters.P_StartDate, p_enddate: $parameters.P_EndDate ) as _DocumentList
+      on _Item.PurchaseRequisition = _DocumentList.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _DocumentList.PurchaseRequisitionItem
+    left outer join ZTEST_USER_LIST as p1
       on _Item.CreatedByUser = p1.usrid
       and p1.begda <= _Item.CreationDate
       and p1.endda >= _Item.CreationDate
       and p1.subty = '0001'
-    inner join pa0001 as p2
+    inner join ZTEST_USER_ORG as p2
       on p1.pernr = p2.pernr
       and p2.begda <= _Item.CreationDate
       and p2.endda >= _Item.CreationDate
-    association [0..1] to ZI_MM_CMCDHDRLAST2 as _LastRelease
+    association [0..1] to ZTEST_LastRelease as _LastRelease
       on _LastRelease.PurchaseRequisition = _Item.PurchaseRequisition
-    association [0..1] to I_Product as _Product
+    association [0..1] to I_SampleProduct as _Product
       on $projection.Product = _Product.Product
-    association [0..1] to I_CompanyCode as _CompanyCode
+    association [0..1] to I_SampleCompanyCode as _CompanyCode
       on $projection.CompanyCode = _CompanyCode.CompanyCode
 {
   key _Item.PurchaseRequisition,
@@ -45,6 +45,6 @@ define view entity ZC_PurReqItemCube
   _Item.PurchasingDocument,
   _Item.Material as Product,
   _Item.CompanyCode,
-  _ZI_MMPurOrdInvAmtQty.BaseUnitOfMeasure as InvBaseUnitOfMeasure,
-  _PRDocList.DocumentList as DocumentList
+  _Amounts.BaseUnitOfMeasure as InvBaseUnitOfMeasure,
+  _DocumentList.DocumentList as DocumentList
 }

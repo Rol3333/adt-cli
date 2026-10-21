@@ -24,6 +24,7 @@ Parses `.acds` (ABAP CDS DDL) source code into a fully typed Abstract Syntax Tre
 - **Named types** — data element and qualified name references
 - **Include directives** — `include <structure>` with optional suffix
 - **Comments** — line (`//`, `--`) and block (`/* */`) comments are skipped
+- **Case-insensitive keywords** — `DEFINE VIEW ENTITY` and `define view entity` both parse; identifiers keep their original spelling
 - **FROM clause** — join chains, parameterized sources, FROM associations
 - **View flavours** — `define view entity <name>` and the legacy `define view <name>`
 - **Projection elements** — paths, calls (`coalesce(a, b)`, `sum(x)`) and `cast(x as type [preserving type])`
@@ -217,15 +218,24 @@ interface JoinClause {
 
 Supported join spellings (normalized to `JoinType`):
 
-| ABAP CDS spelling  | `joinType`   |
-| ------------------ | ------------ |
-| `JOIN`             | `inner`      |
-| `INNER JOIN`       | `inner`      |
-| `LEFT JOIN`        | `leftOuter`  |
-| `LEFT OUTER JOIN`  | `leftOuter`  |
-| `RIGHT JOIN`       | `rightOuter` |
-| `RIGHT OUTER JOIN` | `rightOuter` |
-| `CROSS JOIN`       | `cross`      |
+| ABAP CDS spelling  | `joinType`   | Notes                                  |
+| ------------------ | ------------ | -------------------------------------- |
+| `JOIN`             | `inner`      |                                        |
+| `INNER JOIN`       | `inner`      |                                        |
+| `LEFT OUTER JOIN`  | `leftOuter`  |                                        |
+| `RIGHT OUTER JOIN` | `rightOuter` |                                        |
+| `CROSS JOIN`       | `cross`      | must not carry an `ON` condition       |
+| `LEFT JOIN`        | `leftOuter`  | legacy `define view` only — unverified |
+| `RIGHT JOIN`       | `rightOuter` | legacy `define view` only — unverified |
+
+The `ON` condition is **required** for inner and outer joins and **not allowed**
+for a cross join — the grammar enforces this. `FULL OUTER JOIN` is not part of the
+ABAP CDS DDL join syntax and is rejected.
+
+A view entity requires the documented `LEFT OUTER JOIN` / `RIGHT OUTER JOIN`
+spelling. The legacy `define view` (classic SQL view) syntax also accepts
+`LEFT JOIN` / `RIGHT JOIN` — that legacy rule could not be verified against the
+ABAP keyword documentation and is therefore recorded as _unverified_.
 
 Example:
 

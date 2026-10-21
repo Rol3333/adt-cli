@@ -172,14 +172,14 @@ describe('joins', () => {
 
   it('parses a parameterized source and preserves the bindings', () => {
     const v = getView(`
-      define view entity V as select from ZC_PurReqItemCube
+      define view entity V as select from ZTEST_SampleCube
         ( P_StartDate : :P_Key1StartDate, P_EndDate : :P_Key2EndDate ) as _Cube
       {
         key _Cube.k
       }
     `);
 
-    expect(v.source.name).toBe('ZC_PurReqItemCube');
+    expect(v.source.name).toBe('ZTEST_SampleCube');
     expect(v.source.alias).toBe('_Cube');
     expect(v.source.parameters).toEqual([
       { name: 'P_StartDate', value: ':P_Key1StartDate' },
@@ -189,7 +189,7 @@ describe('joins', () => {
 
   it('preserves system variable and literal bindings', () => {
     const v = getView(`
-      define view entity V as select from ZP_MM_PR_DOC_TF
+      define view entity V as select from ZTEST_DocumentView
         ( mandt : $session.client, p_startdate : $parameters.P_StartDate, p_text : 'X' )
       {
         key k
@@ -206,7 +206,7 @@ describe('joins', () => {
   it('parses a parameterized joined source', () => {
     const v = getView(`
       define view entity V as select from I_Item as _Item
-        left outer join ZP_MM_PR_DOC_TF
+        left outer join ZTEST_DocumentView
           ( mandt : $session.client, p_startdate : $parameters.P_StartDate ) as _PRDocList
           on _Item.PurchaseRequisition = _PRDocList.PurchaseRequisition
       {
@@ -214,15 +214,15 @@ describe('joins', () => {
       }
     `);
 
-    expect(v.joins[0].source.name).toBe('ZP_MM_PR_DOC_TF');
+    expect(v.joins[0].source.name).toBe('ZTEST_DocumentView');
     expect(v.joins[0].source.alias).toBe('_PRDocList');
     expect(v.joins[0].source.parameters).toHaveLength(2);
   });
 
   it('captures a multiline ON condition completely', () => {
     const v = getView(`
-      define view entity V as select from I_Purchaserequisitionitem as _Item
-        left outer join ZI_MMPurOrdInvAmtQty as _Inv
+      define view entity V as select from I_SampleItem as _Item
+        left outer join ZTEST_ItemAmounts as _Inv
           on  _Item.PurchaseRequisition = _Inv.PurchaseRequisition
           and _Item.PurchaseRequisitionItem = _Inv.PurchaseRequisitionItem
       {
@@ -239,12 +239,12 @@ describe('joins', () => {
   it('captures conditions with AND and OR predicates', () => {
     const v = getView(`
       define view entity V as select from I_Item as _Item
-        left outer join pa0105 as p1
+        left outer join ZTEST_USER_LIST as p1
           on _Item.CreatedByUser = p1.usrid
           and p1.begda <= _Item.CreationDate
           and p1.endda >= _Item.CreationDate
           and p1.subty = '0001'
-        inner join pa0001 as p2
+        inner join ZTEST_USER_ORG as p2
           on p1.pernr = p2.pernr
           or p2.pernr = p1.pernr
       {
@@ -364,7 +364,7 @@ describe('real-world join fixture', () => {
   it('parses the join chain of a cube view', () => {
     const v = getView(fixture);
 
-    expect(v.source.name).toBe('I_Purchaserequisitionitem');
+    expect(v.source.name).toBe('I_SampleItem');
     expect(v.source.alias).toBe('_Item');
     expect(v.joins).toHaveLength(6);
     expect(v.joins.map((j) => j.joinType)).toEqual([
@@ -379,9 +379,9 @@ describe('real-world join fixture', () => {
 
   it('keeps the parameter bindings of the joined source', () => {
     const v = getView(fixture);
-    const docList = v.joins.find((j) => j.source.name === 'ZP_MM_PR_DOC_TF');
+    const docList = v.joins.find((j) => j.source.name === 'ZTEST_DocumentView');
 
-    expect(docList?.source.alias).toBe('_PRDocList');
+    expect(docList?.source.alias).toBe('_DocumentList');
     expect(docList?.source.parameters).toEqual([
       { name: 'mandt', value: '$session.client' },
       { name: 'p_startdate', value: '$parameters.P_StartDate' },

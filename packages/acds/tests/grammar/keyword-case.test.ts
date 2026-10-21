@@ -87,14 +87,14 @@ describe('keyword case handling', () => {
     // Reproduces the position of the real-world fixture: several lowercase
     // joins followed by an uppercase one.
     const v = getView(`
-      define view ZC_Cube as select from I_Purchaserequisitionitem as _Item
-        left outer join ZI_MMPurOrdInvAmtQty as _Inv
+      define view ZTEST_SampleCube as select from I_SampleItem as _Item
+        left outer join ZTEST_ItemAmounts as _Inv
           on _Item.PurchaseRequisition = _Inv.PurchaseRequisition
-        left outer join ZP_MM_PuReq_AprDat as _AprDat
+        left outer join ZTEST_ApprovalView as _AprDat
           on _Item.PurchaseRequisition = _AprDat.PurchaseRequisition
-        left outer join ZP_MM_PuReq_ClsDat as _ClsDat
+        left outer join ZTEST_ClosureView as _ClsDat
           on _Item.PurchaseRequisition = _ClsDat.PurchaseRequisition
-        LEFT OUTER JOIN ZP_MM_PR_DOC_TF AS _PRDocList
+        LEFT OUTER JOIN ZTEST_DocumentView AS _PRDocList
           ON _Item.PurchaseRequisition = _PRDocList.PurchaseRequisition
       {
         _Item.PurchaseRequisition
