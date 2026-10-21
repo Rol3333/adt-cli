@@ -222,6 +222,15 @@ export class CdsParser extends CstParser {
       In,
     ]);
 
+  /** Paren depth delta for `matchingParen`. */
+  private static readonly PAREN_DELTA: ReadonlyMap<TokenType, number> = new Map<
+    TokenType,
+    number
+  >([
+    [LParen, 1],
+    [RParen, -1],
+  ]);
+
   /** Bracket depth delta per token for the case-expression scan. */
   private static readonly DEPTH_DELTA: ReadonlyMap<TokenType, number> = new Map<
     TokenType,
@@ -1226,11 +1235,8 @@ export class CdsParser extends CstParser {
     for (let i = from; i < from + 400; i += 1) {
       const t = this.LA(i).tokenType;
       if (t === EOF) return -1;
-      if (t === LParen) depth += 1;
-      else if (t === RParen) {
-        depth -= 1;
-        if (depth === 0) return i;
-      }
+      depth += CdsParser.PAREN_DELTA.get(t) ?? 0;
+      if (t === RParen && depth === 0) return i;
     }
     return -1;
   }
