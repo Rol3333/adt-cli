@@ -74,111 +74,122 @@ export const Identifier = createToken({
 // Keywords (use longer_alt: Identifier)
 // ============================================
 
+/**
+ * Case-insensitive keyword pattern.
+ *
+ * ABAP CDS sources are written in upper, lower or mixed case, so a keyword
+ * has to be recognized in all of them. The token image keeps the original
+ * spelling — identifiers therefore keep their case in the AST.
+ */
+function keyword(word: string): RegExp {
+  return new RegExp(word, 'i');
+}
+
 export const Define = createToken({
   name: 'Define',
-  pattern: /define/,
+  pattern: keyword('define'),
   longer_alt: Identifier,
 });
 
 export const Table = createToken({
   name: 'Table',
-  pattern: /table/,
+  pattern: keyword('table'),
   longer_alt: Identifier,
 });
 
 export const Structure = createToken({
   name: 'Structure',
-  pattern: /structure/,
+  pattern: keyword('structure'),
   longer_alt: Identifier,
 });
 
 export const Type = createToken({
   name: 'Type',
-  pattern: /type/,
+  pattern: keyword('type'),
   longer_alt: Identifier,
 });
 
 export const Service = createToken({
   name: 'Service',
-  pattern: /service/,
+  pattern: keyword('service'),
   longer_alt: Identifier,
 });
 
 export const Expose = createToken({
   name: 'Expose',
-  pattern: /expose/,
+  pattern: keyword('expose'),
   longer_alt: Identifier,
 });
 
 export const Annotate = createToken({
   name: 'Annotate',
-  pattern: /annotate/,
+  pattern: keyword('annotate'),
   longer_alt: Identifier,
 });
 
 export const Entity = createToken({
   name: 'Entity',
-  pattern: /entity/,
+  pattern: keyword('entity'),
   longer_alt: Identifier,
 });
 
 export const With = createToken({
   name: 'With',
-  pattern: /with/,
+  pattern: keyword('with'),
   longer_alt: Identifier,
 });
 
 export const Key = createToken({
   name: 'Key',
-  pattern: /key/,
+  pattern: keyword('key'),
   longer_alt: Identifier,
 });
 
 export const Not = createToken({
   name: 'Not',
-  pattern: /not/,
+  pattern: keyword('not'),
   longer_alt: Identifier,
 });
 
 export const Null = createToken({
   name: 'Null',
-  pattern: /null/,
+  pattern: keyword('null'),
   longer_alt: Identifier,
 });
 
 export const As = createToken({
   name: 'As',
-  pattern: /as/,
+  pattern: keyword('as'),
   longer_alt: Identifier,
 });
 
 export const Include = createToken({
   name: 'Include',
-  pattern: /include/,
+  pattern: keyword('include'),
   longer_alt: Identifier,
 });
 
 export const Suffix = createToken({
   name: 'Suffix',
-  pattern: /suffix/,
+  pattern: keyword('suffix'),
   longer_alt: Identifier,
 });
 
 export const True = createToken({
   name: 'True',
-  pattern: /true/,
+  pattern: keyword('true'),
   longer_alt: Identifier,
 });
 
 export const False = createToken({
   name: 'False',
-  pattern: /false/,
+  pattern: keyword('false'),
   longer_alt: Identifier,
 });
 
 export const Abap = createToken({
   name: 'Abap',
-  pattern: /abap/,
+  pattern: keyword('abap'),
   longer_alt: Identifier,
 });
 
@@ -186,121 +197,121 @@ export const Abap = createToken({
 
 export const View = createToken({
   name: 'View',
-  pattern: /view/,
+  pattern: keyword('view'),
   longer_alt: Identifier,
 });
 
 export const Projection = createToken({
   name: 'Projection',
-  pattern: /projection/,
+  pattern: keyword('projection'),
   longer_alt: Identifier,
 });
 
 export const Select = createToken({
   name: 'Select',
-  pattern: /select/,
+  pattern: keyword('select'),
   longer_alt: Identifier,
 });
 
 export const From = createToken({
   name: 'From',
-  pattern: /from/,
+  pattern: keyword('from'),
   longer_alt: Identifier,
 });
 
 export const On = createToken({
   name: 'On',
-  pattern: /on/,
+  pattern: keyword('on'),
   longer_alt: Identifier,
 });
 
 export const Association = createToken({
   name: 'Association',
-  pattern: /association/,
+  pattern: keyword('association'),
   longer_alt: Identifier,
 });
 
 export const Composition = createToken({
   name: 'Composition',
-  pattern: /composition/,
+  pattern: keyword('composition'),
   longer_alt: Identifier,
 });
 
 export const To = createToken({
   name: 'To',
-  pattern: /to/,
+  pattern: keyword('to'),
   longer_alt: Identifier,
 });
 
 export const Many = createToken({
   name: 'Many',
-  pattern: /many/,
+  pattern: keyword('many'),
   longer_alt: Identifier,
 });
 
 export const One = createToken({
   name: 'One',
-  pattern: /one/,
+  pattern: keyword('one'),
   longer_alt: Identifier,
 });
 
 export const Of = createToken({
   name: 'Of',
-  pattern: /of/,
+  pattern: keyword('of'),
   longer_alt: Identifier,
 });
 
 export const Parameters = createToken({
   name: 'Parameters',
-  pattern: /parameters/,
+  pattern: keyword('parameters'),
   longer_alt: Identifier,
 });
 
 export const Role = createToken({
   name: 'Role',
-  pattern: /role/,
+  pattern: keyword('role'),
   longer_alt: Identifier,
 });
 
 export const Grant = createToken({
   name: 'Grant',
-  pattern: /grant/,
+  pattern: keyword('grant'),
   longer_alt: Identifier,
 });
 
 export const Where = createToken({
   name: 'Where',
-  pattern: /where/,
+  pattern: keyword('where'),
   longer_alt: Identifier,
 });
 
 export const Abstract = createToken({
   name: 'Abstract',
-  pattern: /abstract/,
+  pattern: keyword('abstract'),
   longer_alt: Identifier,
 });
 
 export const Custom = createToken({
   name: 'Custom',
-  pattern: /custom/,
+  pattern: keyword('custom'),
   longer_alt: Identifier,
 });
 
 export const Virtual = createToken({
   name: 'Virtual',
-  pattern: /virtual/,
+  pattern: keyword('virtual'),
   longer_alt: Identifier,
 });
 
 export const Redirected = createToken({
   name: 'Redirected',
-  pattern: /redirected/,
+  pattern: keyword('redirected'),
   longer_alt: Identifier,
 });
 
 export const Default = createToken({
   name: 'Default',
-  pattern: /default/,
+  pattern: keyword('default'),
   longer_alt: Identifier,
 });
 
@@ -312,31 +323,31 @@ export const Default = createToken({
 
 export const Join = createToken({
   name: 'Join',
-  pattern: /join/,
+  pattern: keyword('join'),
   longer_alt: Identifier,
 });
 
 export const Inner = createToken({
   name: 'Inner',
-  pattern: /inner/,
+  pattern: keyword('inner'),
   longer_alt: Identifier,
 });
 
 export const Left = createToken({
   name: 'Left',
-  pattern: /left/,
+  pattern: keyword('left'),
   longer_alt: Identifier,
 });
 
 export const Right = createToken({
   name: 'Right',
-  pattern: /right/,
+  pattern: keyword('right'),
   longer_alt: Identifier,
 });
 
 export const Cross = createToken({
   name: 'Cross',
-  pattern: /cross/,
+  pattern: keyword('cross'),
   longer_alt: Identifier,
 });
 
@@ -346,7 +357,7 @@ export const Cross = createToken({
  */
 export const Outer = createToken({
   name: 'Outer',
-  pattern: /outer/,
+  pattern: keyword('outer'),
   longer_alt: Identifier,
 });
 
@@ -361,13 +372,13 @@ export const Gt = createToken({ name: 'Gt', pattern: />/ });
 
 export const And = createToken({
   name: 'And',
-  pattern: /and/,
+  pattern: keyword('and'),
   longer_alt: Identifier,
 });
 
 export const Or = createToken({
   name: 'Or',
-  pattern: /or/,
+  pattern: keyword('or'),
   longer_alt: Identifier,
 });
 
