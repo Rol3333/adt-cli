@@ -8,13 +8,26 @@ Parses `.acds` (ABAP CDS DDL) source code into a fully typed Abstract Syntax Tre
 
 ### Supported Definitions
 
-| CDS Construct | AST Node               | Example                              |
-| ------------- | ---------------------- | ------------------------------------ |
-| Table         | `TableDefinition`      | `define table ztable { ... }`        |
-| Structure     | `StructureDefinition`  | `define structure zstruct { ... }`   |
-| Simple type   | `SimpleTypeDefinition` | `define type ztype : abap.char(10);` |
-| Service       | `ServiceDefinition`    | `define service zsvc { ... }`        |
-| Metadata ext. | `MetadataExtension`    | `annotate entity ZView with { ... }` |
+| CDS Construct   | AST Node                   | Example                                                                       |
+| --------------- | -------------------------- | ----------------------------------------------------------------------------- |
+| Table           | `TableDefinition`          | `define [root] table [entity] ztable { ... }`                                 |
+| Structure       | `StructureDefinition`      | `define structure zstruct { ... }`                                            |
+| Simple type     | `SimpleTypeDefinition`     | `define type ztype : abap.char(10);`                                          |
+| View entity     | `ViewEntityDefinition`     | `define [root] view entity zv as select ...`                                  |
+| Legacy view     | `ViewEntityDefinition`     | `define view zv as select ...` (`legacy`)                                     |
+| Abstract entity | `AbstractEntityDefinition` | `define abstract entity zae { ... }`                                          |
+| Custom entity   | `CustomEntityDefinition`   | `define custom entity zce { ... }`                                            |
+| External entity | `ExternalEntityDefinition` | `define external entity zee { ... } with federated data provided at runtime;` |
+| Table function  | `TableFunctionDefinition`  | `define table function ztf returns { ... }`                                   |
+| Scalar function | `ScalarFunctionDefinition` | `define scalar function zsf ...`                                              |
+| Hierarchy       | `HierarchyDefinition`      | `define hierarchy zh as parent child hierarchy(...) { ... }`                  |
+| Aspect          | `AspectDefinition`         | `define aspect za { ... }`                                                    |
+| Annotation      | `AnnotationDefinition`     | `define annotation za: Boolean;`                                              |
+| Access policy   | `AccessPolicyDefinition`   | `define accesspolicy zap { ... }`                                             |
+| Service         | `ServiceDefinition`        | `define service zsvc { ... }`                                                 |
+| Extension       | `ExtensionDefinition`      | `extend view entity zv with { ... }`                                          |
+| Metadata ext.   | `MetadataExtension`        | `annotate entity ZView with { ... }`                                          |
+| Role (DCL)      | `RoleDefinition`           | `define role zr { grant select ... }`                                         |
 
 ### Parser Features
 
