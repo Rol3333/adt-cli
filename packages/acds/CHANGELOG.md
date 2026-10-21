@@ -1,3 +1,25 @@
+## 0.4.17 (2026-10-21)
+
+### 🚀 Features
+
+- **acds:** extend the CDS grammar to the full DDL/DCL statement set ([5796ebbb](https://github.com/abapify/adt-cli/commit/5796ebbb))
+
+### 🩹 Fixes
+
+- **acds:** order Redefinition before Redefine in token list ([dc1e5278](https://github.com/abapify/adt-cli/commit/dc1e5278))
+- **acds:** round-2 review findings — coverage metadata, walker, docs ([6e38c7e5](https://github.com/abapify/adt-cli/commit/6e38c7e5))
+- **acds:** address review findings — parser robustness, docs, tests ([d8a3e2fd](https://github.com/abapify/adt-cli/commit/d8a3e2fd))
+- **acds:** make the join syntax flavour-independent and support FULL OUTER JOIN ([557f7c5b](https://github.com/abapify/adt-cli/commit/557f7c5b))
+- **acds:** recognize keywords case-insensitively ([a8c09d3e](https://github.com/abapify/adt-cli/commit/a8c09d3e))
+- **acds:** enforce the ON condition in the join grammar ([d6df7b93](https://github.com/abapify/adt-cli/commit/d6df7b93))
+- **acds:** keep FROM-region starters out of the bare source alias ([37d750f1](https://github.com/abapify/adt-cli/commit/37d750f1))
+
+### ❤️ Thank You
+
+- Devin @devin-ai-integration[bot]
+- rol3333yahoo.com
+- ThePlenkov @ThePlenkov
+
 ## 0.4.16 (2026-09-29)
 
 This was a version bump only for @abapify/acds to align it with other projects, there were no code changes.

@@ -1,3 +1,7 @@
+## 0.4.17 (2026-10-21)
+
+This was a version bump only for adt-auth to align it with other projects, there were no code changes.
+
 ## 0.4.16 (2026-09-29)
 
 This was a version bump only for adt-auth to align it with other projects, there were no code changes.
