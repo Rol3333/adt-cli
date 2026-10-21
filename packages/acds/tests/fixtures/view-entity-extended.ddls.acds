@@ -42,12 +42,17 @@ group by
   _cust.CustomerName
 having count(*) > 0
 union all
-  select from I_SalesOrderArchive as _arch {
+  select from I_SalesOrderArchive as _arch
+  association to parent Z_SALES_ROOT as _parent
+    on $projection.ParentKey = _parent.Key
+  {
     key _arch.SalesOrder,
         _arch.SoldToParty as Customer,
         'archived'        as CustomerName,
         _arch.NetAmount   as NetAmount,
         'n/a'             as Note,
         'done'            as StatusText,
-        _arch.NetAmount   as GrossAmount
+        _arch.NetAmount   as GrossAmount,
+        _arch._item       as Item,
+        _parent
   }

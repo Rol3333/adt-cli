@@ -33,6 +33,11 @@
  * ## Condition coverage (`ON` / `WHERE`)
  *
  * The condition is captured opaquely as `Expression { source, tokens }`.
+ *
+ * ## Rejected by the grammar (listed here, NOT in `constructs`)
+ *
+ *   - `CROSS JOIN` with an `ON` condition
+ *   - `INNER` / `LEFT` / `RIGHT` / `FULL JOIN` without an `ON` condition
  */
 import type { GrammarCoverage } from './index';
 
@@ -63,9 +68,5 @@ export const joinsCoverage: GrammarCoverage = {
     'ON condition with arithmetic operands (B.k + 1 = A.k)',
     'join cardinality ([INNER] TO ONE|MANY JOIN, MANY TO ONE JOIN, ...)',
     'grouped joins ((A join B on ...) left join C on ...)',
-
-    // --- rejected by the parser ---
-    'CROSS JOIN with an ON condition',
-    'INNER / LEFT / RIGHT / FULL JOIN without an ON condition',
   ],
 };

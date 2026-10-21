@@ -16,8 +16,10 @@
  * downstream consumers can inspect the `source` / `tokens` arrays but the
  * parser does not interpret them further.
  *
- * Grant clauses may appear in any order inside a grant statement — the
- * grammar folds them into a single `GrantStatement`.
+ * Clause order inside a grant is only partially free: `with optional
+ * elements`, `combination mode` and `where` may appear in any order, but a
+ * trailing `where`/`inherit`-condition is captured greedily up to `;`, so a
+ * condition clause must be the last clause of its statement.
  */
 import type { GrammarCoverage } from './index';
 
@@ -29,7 +31,7 @@ export const dclCoverage: GrammarCoverage = {
     'grant select on <entity>',
     'grant select on <entity> where <expression>',
     'grant select on <entity> with optional elements ( ... )',
-    'grant ... combination mode and|or',
+    'grant ... combination mode and|or|redefinition',
     'inherit <role> [for grant select on <entity>] [where ...]',
     'inheriting conditions from entity <name>|super [default ...]',
   ],

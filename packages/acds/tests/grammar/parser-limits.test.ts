@@ -72,5 +72,6 @@ describe('parser limits', () => {
     };
     const on = view.joins?.[0]?.on?.source ?? '';
     expect(on).toContain('+ 1');
+    expect(on).toContain('= A.k');
   });
 });

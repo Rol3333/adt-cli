@@ -8,6 +8,7 @@ import type {
   HierarchyDefinition,
   RoleDefinition,
   ScalarFunctionDefinition,
+  TableDefinition,
   TableFunctionDefinition,
   ViewEntityDefinition,
 } from '../../src/ast';
@@ -51,15 +52,19 @@ describe('extended DDL definitions', () => {
   });
 
   it('parses union / intersect / except set operations', () => {
-    for (const op of ['union', 'union all', 'intersect', 'except']) {
+    const expected = {
+      union: 'union',
+      'union all': 'unionAll',
+      intersect: 'intersect',
+      except: 'except',
+    } as const;
+    for (const [sql, operator] of Object.entries(expected)) {
       const v = first(`
         define view entity V as select from A { key A.f }
-        ${op} select from B { key B.f }
+        ${sql} select from B { key B.f }
       `) as ViewEntityDefinition;
       expect(v.setOperations).toHaveLength(1);
-      expect(v.setOperations?.[0].operator.replace('All', ' all')).toContain(
-        op.split(' ')[0],
-      );
+      expect(v.setOperations?.[0].operator).toBe(operator);
     }
   });
 
@@ -69,8 +74,10 @@ describe('extended DDL definitions', () => {
         key id : abap.char(10);
         name : abap.char(30);
       }
-    `);
+    `) as TableDefinition;
     expect(t.kind).toBe('table');
+    expect(t.entity).toBe(true);
+    expect(t.root).toBe(true);
   });
 
   it('parses a table function', () => {

@@ -226,12 +226,15 @@ export interface Cardinality extends AstNode {
 export type CardinalityWord = 'one' | 'exactOne' | 'many';
 
 /**
- * Word-form cardinality: `of {many|one|exact one} to {many|one|exact one}`
+ * Word-form cardinality: `of {many|one|exact one} [to] <target>`
  * for associations, and `[{one|many|exact one}] to {one|exact one|many}`
  * for joins (`many to one join`, `to one join`).
  */
 export interface WordCardinality extends AstNode {
-  /** Source-side bound (`of <source> to …`); absent for `to <target>`. */
+  /**
+   * Source-side bound — only populated by join cardinalities
+   * (`many to one join`); `of`-form associations keep a single `target`.
+   */
   source?: CardinalityWord;
   /** Target-side bound. */
   target: CardinalityWord;

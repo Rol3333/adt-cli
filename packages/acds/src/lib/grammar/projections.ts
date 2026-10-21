@@ -17,8 +17,8 @@
  * association redirections (`<assoc> : redirected to <target>`), and
  * `redirected to composition child <target>` elements.
  *
- * Not yet implemented:
- *   - Window functions (`over ( ... )` frames are tokenized but kept opaque).
+ * Window functions: `over (partition by <fields> [order by <sort>])` after
+ * a call operand is accepted and preserved verbatim in the expression text.
  */
 import type { GrammarCoverage } from './index';
 

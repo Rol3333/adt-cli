@@ -82,7 +82,10 @@ export const Identifier = createToken({
  * spelling — identifiers therefore keep their case in the AST.
  */
 function keyword(word: string): RegExp {
-  return new RegExp(word, 'i');
+  // `word` is always a plain identifier literal, but escape it so the
+  // helper stays safe for any future keyword containing regex syntax.
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped, 'i');
 }
 
 export const Define = createToken({
@@ -500,7 +503,7 @@ export const Bind = createToken({
 
 // ---- Functions -----------------------------------------------------------
 
-export const Function = createToken({
+export const FunctionKeyword = createToken({
   name: 'Function',
   pattern: keyword('function'),
   longer_alt: Identifier,
@@ -808,7 +811,7 @@ export const Descending = createToken({
   longer_alt: Identifier,
 });
 
-export const Error = createToken({
+export const ErrorKeyword = createToken({
   name: 'Error',
   pattern: keyword('error'),
   longer_alt: Identifier,
@@ -1044,7 +1047,7 @@ export const keywordTokens = [
   Localized,
   Filter,
   Bind,
-  Function,
+  FunctionKeyword,
   Returns,
   Implemented,
   Method,
@@ -1090,7 +1093,7 @@ export const keywordTokens = [
   Incremental,
   Leaves,
   Descending,
-  Error,
+  ErrorKeyword,
   Ignore,
   Breakup,
   Force,

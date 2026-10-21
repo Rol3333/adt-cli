@@ -184,13 +184,22 @@ interface ViewEntityDefinition {
   kind: 'viewEntity';
   name: string;
   annotations: Annotation[];
+  legacy?: boolean; // true for the legacy `define view <name>` syntax
+  root?: boolean; // `define root view entity`
+  writable?: boolean; // `define writable view entity`
+  providerContract?: string; // `provider contract transactional_query`
   sourceKind: DataSourceKind; // 'select' | 'projection'
+  distinct?: boolean; // `select distinct`
   source: DataSource; // the root data source
   joins: JoinClause[]; // ordered join chain — empty when there are no joins
   fromAssociations?: AssociationDeclaration[]; // associations of the FROM region
+  aspectBindings?: AspectBinding[]; // `bind aspect` bindings
   parameters: ParameterDefinition[];
   members: ViewMember[];
   where?: Expression;
+  groupBy?: string[];
+  having?: Expression;
+  setOperations?: SetOperation[]; // union/intersect/except branches
 }
 
 interface DataSource {
@@ -206,12 +215,23 @@ interface DataSourceParameter {
 
 type JoinType = 'inner' | 'leftOuter' | 'rightOuter' | 'fullOuter' | 'cross';
 
-interface JoinClause {
+// Conditioned joins always carry an ON condition — the grammar enforces it.
+interface ConditionedJoinClause {
   kind: 'join';
-  joinType: JoinType; // normalized spelling
-  source: DataSource; // the joined source (with alias / parameters)
-  on?: Expression; // the ON condition (opaque)
+  joinType: 'inner' | 'leftOuter' | 'rightOuter' | 'fullOuter';
+  source: JoinSource; // DataSource | JoinGroup
+  on: Expression; // the ON condition (opaque)
+  cardinality?: WordCardinality; // `many to one join` / `to one join`
 }
+
+// A cross join never carries an ON condition.
+interface CrossJoinClause {
+  kind: 'join';
+  joinType: 'cross';
+  source: JoinSource;
+}
+
+type JoinClause = ConditionedJoinClause | CrossJoinClause;
 ```
 
 Supported join spellings (normalized to `JoinType`):
@@ -291,14 +311,13 @@ Source string
 
 ## Roadmap
 
-- ✅ **DDL**: tables, structures, simple types, view entities, projection views, abstract/custom entities, services (SRVD), metadata extensions (DDLX), parameters, associations, compositions
-- ✅ **DCL**: role definitions with grant-select + where clauses
+- ✅ **DDL**: tables, structures, simple types, view entities (`define [root] view entity`, projection views + `provider contract`), legacy `define view`, abstract/custom/table/external entities, table/scalar functions, hierarchies, aspects (DRAS), DDLA annotation definitions, access policies, services (SRVD), metadata extensions (DDLX), `extend view/entity` forms, parameters, associations, compositions
+- ✅ **DCL**: role definitions — `switchable`, grant-select + `where`, `with optional elements`, `combination mode and|or|redefinition`, `inherit`, `inheriting conditions`
 - ✅ **Annotations**: full value grammar (strings, enums, booleans, numbers, arrays, objects, dotted keys)
 - ✅ **Tooling**: AST walker helpers, semantic validators (`SemanticDiagnostic`), grammar coverage metadata
-- ✅ **FROM clause**: join chains (`inner`, `left [outer]`, `right [outer]`, `full [outer]`, `cross`), parameterized sources, FROM associations
+- ✅ **FROM clause**: join chains (`inner`, `left [outer]`, `right [outer]`, `full [outer]`, `cross`) with word cardinalities and grouped joins, parameterized sources, FROM associations, path-expression data sources (`_assoc[ ... ]`), `bind aspect`
+- ✅ **Elements**: `case … end`, arithmetic, casts, calls (incl. `f()`), window `over (…)`, paths, `: localized`, `: redirected to`, `distinct`, `where`/`group by`/`having`, `union [all]`/`intersect`/`except`
 - 🔜 **Expression grammar** (structured `on`/`where` trees — currently opaque `{ source, tokens }`)
-- 🔜 **CASE**, arithmetic expressions, GROUP BY, UNION
-- 🔜 **`define aspect` (DRAS), `define hierarchy`, cache definitions (DTDC/DTSC), scalar functions (DSFD)**
 - 🔜 **BDEF / behavior definitions** (owned by epic E10)
 
 ## Dependencies

@@ -35,7 +35,7 @@ export const associationsCoverage: GrammarCoverage = {
     'association <target> (implicit to)',
     'association[cardinality] to <target>',
     'association[L..U] to <target>',
-    'association of (many|one|exact one) [to <card>] <target>',
+    'association of (many|one|exact one) [to] <target>',
     'composition [of] <target>',
     'association to parent <target>',
     'association to redirected to <target>',

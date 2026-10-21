@@ -20,7 +20,7 @@
  * groupings are delimited with section banners and documented in
  * `src/lib/grammar/`.
  */
-import { CstParser } from 'chevrotain';
+import { CstParser, EOF } from 'chevrotain';
 import type { IToken, TokenType } from 'chevrotain';
 import {
   allTokens,
@@ -103,7 +103,7 @@ import {
   Redefinition,
   Filter,
   Bind,
-  Function,
+  FunctionKeyword,
   Returns,
   Implemented,
   Method,
@@ -155,7 +155,7 @@ import {
   Allowed,
   Ascending,
   Descending,
-  Error,
+  ErrorKeyword,
   Ignore,
   Breakup,
   Force,
@@ -206,6 +206,39 @@ export class CdsParser extends CstParser {
   private static readonly NAME_TOKEN_SET: ReadonlySet<TokenType> = new Set(
     CdsParser.NAME_TOKENS,
   );
+
+  /** Comparison operators that end a parenthesized *operand*. */
+  private static readonly COMPARISON_TOKEN_SET: ReadonlySet<TokenType> =
+    new Set<TokenType>([
+      Eq,
+      EqEq,
+      NotEq,
+      Lt,
+      LtEq,
+      Gt,
+      GtEq,
+      Like,
+      Between,
+      In,
+    ]);
+
+  /** Tokens that mark a parenthesized group as a *condition*. */
+  private static readonly CONDITION_MARKER_SET: ReadonlySet<TokenType> =
+    new Set<TokenType>([
+      Eq,
+      EqEq,
+      NotEq,
+      Lt,
+      LtEq,
+      Gt,
+      GtEq,
+      Like,
+      Between,
+      In,
+      And,
+      Or,
+      Not,
+    ]);
 
   /**
    * Tokens that must not be read as a *bare* (implicit) source alias — they
@@ -380,7 +413,8 @@ export class CdsParser extends CstParser {
         // `table function` vs a table named `function`: only the function
         // form when a name follows (`table function f …`).
         GATE: () =>
-          this.LA(1).tokenType === Function && this.isNameToken(this.LA(2)),
+          this.LA(1).tokenType === FunctionKeyword &&
+          this.isNameToken(this.LA(2)),
         ALT: () => this.SUBRULE(this.tableFunctionTail),
       },
       {
@@ -410,7 +444,7 @@ export class CdsParser extends CstParser {
   });
 
   private readonly tableFunctionTail = this.RULE('tableFunctionTail', () => {
-    this.CONSUME(Function);
+    this.CONSUME(FunctionKeyword);
     this.SUBRULE(this.cdsName);
     this.OPTION(() => {
       this.SUBRULE(this.parametersClause);
@@ -503,7 +537,12 @@ export class CdsParser extends CstParser {
       this.OPTION(() => {
         this.SUBRULE(this.parametersClause);
       });
-      this.SUBRULE(this.elementList);
+      this.memberContext = 'entity';
+      try {
+        this.SUBRULE(this.elementList);
+      } finally {
+        this.memberContext = 'view';
+      }
     },
   );
 
@@ -516,7 +555,12 @@ export class CdsParser extends CstParser {
       this.OPTION(() => {
         this.SUBRULE(this.parametersClause);
       });
-      this.SUBRULE(this.elementList);
+      this.memberContext = 'entity';
+      try {
+        this.SUBRULE(this.elementList);
+      } finally {
+        this.memberContext = 'view';
+      }
     },
   );
 
@@ -653,7 +697,7 @@ export class CdsParser extends CstParser {
    * `ZP_MM_PR_DOC_TF( mandt: $session.client ) as _PRDocList`.
    */
   private readonly dataSource = this.RULE('dataSource', () => {
-    this.SUBRULE(this.qualifiedName);
+    this.SUBRULE(this.dataSourcePath);
     this.OPTION(() => {
       this.SUBRULE(this.dataSourceParameters);
     });
@@ -672,6 +716,19 @@ export class CdsParser extends CstParser {
           ALT: () => this.SUBRULE(this.bareAliasName),
         },
       ]);
+    });
+  });
+
+  /**
+   * `<name>[<attr>].<name>…` — a FROM data-source path. Path segments may
+   * carry `[ … ]` association filters/attribute bindings (captured opaquely),
+   * e.g. `_order._items[1:currency = 'EUR']`.
+   */
+  private readonly dataSourcePath = this.RULE('dataSourcePath', () => {
+    this.SUBRULE(this.pathSegment);
+    this.MANY(() => {
+      this.CONSUME(Dot);
+      this.SUBRULE2(this.pathSegment);
     });
   });
 
@@ -1052,6 +1109,13 @@ export class CdsParser extends CstParser {
   }
 
   /**
+   * `view` — the element list allows projection suffixes (`: localized`,
+   * `: redirected to`); `entity` — abstract/custom entity bodies where a
+   * token after `:` is always a type name.
+   */
+  private memberContext: 'view' | 'entity' = 'view';
+
+  /**
    * Cheap lookahead: `name :` → typed field. Any keyword may be a name
    * (`Type : abap.char(1)`), but `name : localized` / `name : redirected …`
    * are projection-element suffixes, not typed fields.
@@ -1060,13 +1124,16 @@ export class CdsParser extends CstParser {
     const first = this.LA(1);
     const second = this.LA(2);
     const third = this.LA(3);
-    if (!first || !second) return false;
     if (!this.isNameToken(first) || second.tokenType !== Colon) return false;
-    return ![Localized, Redirected].includes(third?.tokenType as TokenType);
+    // In entity bodies there are no projection suffixes — `localized` and
+    // `redirected` are ordinary keyword-spelled type names.
+    if (this.memberContext === 'entity') return true;
+    return ![Localized, Redirected].includes(third.tokenType);
   }
 
-  private isNameToken(token: IToken | undefined): boolean {
-    return !!token && CdsParser.NAME_TOKEN_SET.has(token.tokenType);
+  // `LA()` returns the EOF token past the end of input — never `undefined`.
+  private isNameToken(token: IToken): boolean {
+    return CdsParser.NAME_TOKEN_SET.has(token.tokenType);
   }
 
   /**
@@ -1079,8 +1146,10 @@ export class CdsParser extends CstParser {
     const first = this.LA(1).tokenType;
     if (first !== Association && first !== Composition) return false;
     const second = this.LA(2);
-    if (!second) return false;
     if ([To, Of, LBracket].includes(second.tokenType)) return true;
+    // `association as <alias>` is an element *named* `association` — `as`
+    // only starts a declaration's alias after a target was parsed.
+    if (second.tokenType === As) return false;
     return this.isNameToken(second);
   }
 
@@ -1089,8 +1158,7 @@ export class CdsParser extends CstParser {
    * whether `key`/`virtual`/`redirected` are element flags or the element
    * name itself.
    */
-  private isElementStart(token: IToken | undefined): boolean {
-    if (!token) return false;
+  private isElementStart(token: IToken): boolean {
     if (this.isNameToken(token)) return true;
     return [
       StringLiteral,
@@ -1129,14 +1197,13 @@ export class CdsParser extends CstParser {
    * group an operand of a comparison like `(a + b) = 1`).
    */
   private isParenCondition(): boolean {
-    const typeAt = (n: number) => this.LA(n)?.tokenType;
-    if (typeAt(1) !== LParen) return false;
+    if (this.LA(1).tokenType !== LParen) return false;
     // Find the matching `)`.
     let depth = 0;
     let close = -1;
     for (let i = 1; i < 400; i += 1) {
-      const t = typeAt(i);
-      if (t === undefined) return false;
+      const t = this.LA(i).tokenType;
+      if (t === EOF) return false;
       if (t === LParen) depth += 1;
       else if (t === RParen) {
         depth -= 1;
@@ -1148,41 +1215,28 @@ export class CdsParser extends CstParser {
     }
     if (close < 0) return false;
     // A comparison operator directly after `)` → the group is an operand.
-    const after = this.LA(close + 1);
-    if (
-      after &&
-      ([Eq, EqEq, NotEq, Lt, LtEq, Gt, GtEq, Like, Between, In].includes(
-        after.tokenType,
-      ) ||
-        (after.tokenType === Identifier && after.image.toLowerCase() === 'is'))
-    ) {
-      return false;
-    }
+    if (this.isComparisonToken(this.LA(close + 1))) return false;
     // Predicate-ish token inside the parens (any depth) → condition.
     for (let i = 2; i < close; i += 1) {
       const tok = this.LA(i);
       if (
-        [
-          Eq,
-          EqEq,
-          NotEq,
-          Lt,
-          LtEq,
-          Gt,
-          GtEq,
-          Like,
-          Between,
-          In,
-          And,
-          Or,
-          Not,
-        ].includes(tok.tokenType) ||
-        (tok.tokenType === Identifier && tok.image.toLowerCase() === 'is')
+        CdsParser.CONDITION_MARKER_SET.has(tok.tokenType) ||
+        this.isIsKeyword(tok)
       ) {
         return true;
       }
     }
     return false;
+  }
+
+  private isComparisonToken(tok: IToken): boolean {
+    return (
+      CdsParser.COMPARISON_TOKEN_SET.has(tok.tokenType) || this.isIsKeyword(tok)
+    );
+  }
+
+  private isIsKeyword(tok: IToken): boolean {
+    return tok.tokenType === Identifier && tok.image.toLowerCase() === 'is';
   }
 
   /**
@@ -1192,9 +1246,12 @@ export class CdsParser extends CstParser {
   private isCaseExpression(): boolean {
     if (this.LA(1).tokenType !== Case) return false;
     let depth = 0;
-    for (let i = 2; i < 30; i += 1) {
-      const t = this.LA(i)?.tokenType;
-      if (t === undefined) return false;
+    // Scans until `when`, an element terminator or EOF — the cap only guards
+    // against pathological inputs; a `case` element far before its first
+    // `when` is still a case expression.
+    for (let i = 2; i < 500; i += 1) {
+      const t = this.LA(i).tokenType;
+      if (t === EOF) return false;
       if (t === LParen || t === LBracket) depth += 1;
       else if (t === RParen || t === RBracket) {
         if (depth === 0) return false;
@@ -1387,7 +1444,7 @@ export class CdsParser extends CstParser {
     'scalarFunctionDefinition',
     () => {
       this.CONSUME(Scalar);
-      this.CONSUME(Function);
+      this.CONSUME(FunctionKeyword);
       this.SUBRULE(this.cdsName);
       this.OPTION(() => {
         this.SUBRULE(this.parametersClause);
@@ -1550,7 +1607,7 @@ export class CdsParser extends CstParser {
     this.CONSUME(Orphans);
     this.OR([
       { ALT: () => this.CONSUME(Ignore) },
-      { ALT: () => this.CONSUME(Error) },
+      { ALT: () => this.CONSUME(ErrorKeyword) },
       { ALT: () => this.CONSUME(Root) },
     ]);
   });
@@ -1559,7 +1616,7 @@ export class CdsParser extends CstParser {
   private readonly hierarchyCycles = this.RULE('hierarchyCycles', () => {
     this.CONSUME(Cycles);
     this.OR([
-      { ALT: () => this.CONSUME(Error) },
+      { ALT: () => this.CONSUME(ErrorKeyword) },
       { ALT: () => this.CONSUME(Breakup) },
     ]);
   });
@@ -1642,7 +1699,9 @@ export class CdsParser extends CstParser {
       if (!this.isNameToken(this.LA(i))) return false;
       i += 1;
       if (typeAt(i) === LParen) {
-        while (typeAt(i) !== RParen && typeAt(i) !== undefined) i += 1;
+        // `LA()` returns the EOF token past the end of input — the loop
+        // must stop on it or a truncated `abap.char(` scans forever.
+        while (typeAt(i) !== RParen && typeAt(i) !== EOF) i += 1;
         i += 1;
       }
       return typeAt(i) === Semicolon;
@@ -1911,7 +1970,8 @@ export class CdsParser extends CstParser {
    * plus `true`/`false`/`void` and `and`/`or`/`not` combinations.
    */
   private readonly dclCondition = this.RULE('dclCondition', () => {
-    this.MANY(() => {
+    // At least one token — `where ;` is malformed DCL, not an empty filter.
+    this.AT_LEAST_ONE(() => {
       this.OR(
         CdsParser.DCL_TOKENS.map((tokenType) => ({
           ALT: () => this.CONSUME(tokenType),

@@ -18,7 +18,9 @@ import type {
   FieldDefinition,
   HierarchyDefinition,
   JoinClause,
+  JoinSource,
   ParameterDefinition,
+  SelectStatement,
   ScalarFunctionDefinition,
   StructureDefinition,
   TableDefinition,
@@ -186,10 +188,45 @@ export function* walkJoins(
 ): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
   for (const def of walkDefinitions(file)) {
     if (def.kind !== 'viewEntity') continue;
-    for (const join of def.joins ?? []) {
-      yield { owner: def, join };
+    yield* walkJoinChain(def, def.joins ?? []);
+    // Set-operation branches (`union … select …`) carry their own joins.
+    for (const op of def.setOperations ?? []) {
+      yield* walkSelectJoins(def, op.statement);
     }
   }
+}
+
+function* walkSelectJoins(
+  owner: ViewEntityDefinition,
+  select: {
+    joins?: JoinClause[];
+    setOperations?: { statement: SelectStatement }[];
+  },
+): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
+  yield* walkJoinChain(owner, select.joins ?? []);
+  for (const op of select.setOperations ?? []) {
+    yield* walkSelectJoins(owner, op.statement);
+  }
+}
+
+function* walkJoinChain(
+  owner: ViewEntityDefinition,
+  joins: JoinClause[],
+): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
+  for (const join of joins) {
+    yield { owner, join };
+    yield* walkJoinSource(owner, join.source);
+  }
+}
+
+/** Descend into a grouped join source (`join (A join B on …) on …`). */
+function* walkJoinSource(
+  owner: ViewEntityDefinition,
+  source: JoinSource,
+): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
+  if (source.kind !== 'joinGroup') return;
+  yield* walkJoinSource(owner, source.source);
+  yield* walkJoinChain(owner, source.joins);
 }
 
 /** Yield every field definition from tables and structures. */

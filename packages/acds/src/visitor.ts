@@ -124,13 +124,20 @@ function ctxTokens(ctx: Ctx): IToken[] {
  */
 function formatTokens(toks: IToken[]): string {
   let out = '';
-  for (const t of toks) {
-    const img = t.image;
+  for (let i = 0; i < toks.length; i += 1) {
+    const img = toks[i].image;
     if (!out) {
       out = img;
       continue;
     }
+    // Typed literals spell `abap.dats'20200101'` — no space before the quote.
+    const typedLiteral =
+      img.startsWith("'") &&
+      i >= 2 &&
+      toks[i - 2].image === '.' &&
+      /^[A-Za-z_]\w*$/.test(toks[i - 1].image);
     const tight =
+      typedLiteral ||
       ['(', ',', ')', ']', '.', ':'].includes(img) ||
       out.endsWith('(') ||
       out.endsWith('[') ||
@@ -259,12 +266,13 @@ export class CdsVisitor extends BaseCstVisitor {
     const members = asNodes(ctx.tableMember).map(
       (node) => this.visit(node) as TableMember,
     );
+    // `root` is applied by prefixedDefinition when a Root token is present —
+    // `define writable table entity` must not inherit it.
     return {
       kind: 'table',
       name,
       annotations: [],
       entity: true,
-      root: true,
       members,
     };
   }
@@ -339,65 +347,97 @@ export class CdsVisitor extends BaseCstVisitor {
       ? (this.visit(asNodes(ctx.parametersClause)[0]) as ParameterDefinition[])
       : [];
 
-    let sourceKind: DataSourceKind = 'select';
-    let distinct = false;
-    let source: DataSource = { name: '' };
-    let joins: JoinClause[] = [];
-    let fromAssociations: AssociationDeclaration[] = [];
-    let redefinedAssociations: RedefinedAssociation[] = [];
-    let aspectBindings: AspectBinding[] = [];
-    let members: ViewMember[] = [];
-    let where: Expression | undefined;
-    let groupBy: string[] | undefined;
-    let having: Expression | undefined;
-    let setOperations: SetOperation[] | undefined;
-
-    if (ctx.selectStatement) {
-      sourceKind = 'select';
-      const select = this.visit(
-        asNodes(ctx.selectStatement)[0],
-      ) as SelectStatement;
-      distinct = !!select.distinct;
-      source = select.source;
-      joins = select.joins;
-      fromAssociations = select.fromAssociations ?? [];
-      aspectBindings = select.aspectBindings ?? [];
-      members = select.members;
-      where = select.where;
-      groupBy = select.groupBy;
-      having = select.having;
-      setOperations = select.setOperations;
-    } else if (ctx.projectionTail) {
-      sourceKind = 'projection';
-      const proj = this.visit(asNodes(ctx.projectionTail)[0]) as ProjectionTail;
-      source = proj.source;
-      fromAssociations = proj.associations;
-      redefinedAssociations = proj.redefinedAssociations;
-      aspectBindings = proj.aspectBindings;
-      members = proj.members;
-      where = proj.where;
-    }
+    const tail = this.viewTail(ctx);
 
     return {
       kind: 'viewEntity',
       name,
       annotations: [],
-      sourceKind,
-      source,
-      joins,
+      sourceKind: tail.sourceKind,
+      source: tail.source,
+      joins: tail.joins,
       parameters,
-      members,
+      members: tail.members,
       ...(legacy && { legacy: true }),
-      ...(distinct && { distinct: true }),
+      ...(tail.distinct && { distinct: true }),
       ...(providerContract && { providerContract }),
-      ...(fromAssociations.length > 0 && { fromAssociations }),
-      ...(redefinedAssociations.length > 0 && { redefinedAssociations }),
-      ...(aspectBindings.length > 0 && { aspectBindings }),
-      ...(where && { where }),
-      ...(groupBy && { groupBy }),
-      ...(having && { having }),
-      ...(setOperations && setOperations.length > 0 && { setOperations }),
+      ...(tail.fromAssociations.length > 0 && {
+        fromAssociations: tail.fromAssociations,
+      }),
+      ...(tail.redefinedAssociations.length > 0 && {
+        redefinedAssociations: tail.redefinedAssociations,
+      }),
+      ...(tail.aspectBindings.length > 0 && {
+        aspectBindings: tail.aspectBindings,
+      }),
+      ...(tail.where && { where: tail.where }),
+      ...(tail.groupBy && { groupBy: tail.groupBy }),
+      ...(tail.having && { having: tail.having }),
+      ...(tail.setOperations &&
+        tail.setOperations.length > 0 && {
+          setOperations: tail.setOperations,
+        }),
     };
+  }
+
+  /** Reduce the `as select …` / `as projection …` tail to a shared shape. */
+  private viewTail(ctx: Ctx): {
+    sourceKind: DataSourceKind;
+    distinct: boolean;
+    source: DataSource;
+    joins: JoinClause[];
+    fromAssociations: AssociationDeclaration[];
+    redefinedAssociations: RedefinedAssociation[];
+    aspectBindings: AspectBinding[];
+    members: ViewMember[];
+    where?: Expression;
+    groupBy?: string[];
+    having?: Expression;
+    setOperations?: SetOperation[];
+  } {
+    const empty = {
+      sourceKind: 'select' as DataSourceKind,
+      distinct: false,
+      source: { name: '' },
+      joins: [],
+      fromAssociations: [],
+      redefinedAssociations: [],
+      aspectBindings: [],
+      members: [],
+    };
+    if (ctx.selectStatement) {
+      const select = this.visit(
+        asNodes(ctx.selectStatement)[0],
+      ) as SelectStatement;
+      return {
+        ...empty,
+        sourceKind: 'select',
+        distinct: !!select.distinct,
+        source: select.source,
+        joins: select.joins,
+        fromAssociations: select.fromAssociations ?? [],
+        aspectBindings: select.aspectBindings ?? [],
+        members: select.members,
+        where: select.where,
+        groupBy: select.groupBy,
+        having: select.having,
+        setOperations: select.setOperations,
+      };
+    }
+    if (ctx.projectionTail) {
+      const proj = this.visit(asNodes(ctx.projectionTail)[0]) as ProjectionTail;
+      return {
+        ...empty,
+        sourceKind: 'projection',
+        source: proj.source,
+        fromAssociations: proj.associations,
+        redefinedAssociations: proj.redefinedAssociations,
+        aspectBindings: proj.aspectBindings,
+        members: proj.members,
+        where: proj.where,
+      };
+    }
+    return empty;
   }
 
   abstractEntityDefinition(ctx: Ctx): AbstractEntityDefinition {
@@ -505,9 +545,11 @@ export class CdsVisitor extends BaseCstVisitor {
     );
     // `where` is the first condition, `having` the second (when present).
     const where = ctx.Where ? toExpression(conditions[0]) : undefined;
-    const having = ctx.Having
-      ? toExpression(conditions[ctx.Where ? 1 : 0])
-      : undefined;
+    let having: Expression | undefined;
+    if (ctx.Having) {
+      const havingIndex = ctx.Where ? 1 : 0;
+      having = toExpression(conditions[havingIndex]);
+    }
     const setOperations = asNodes(ctx.setOperation).map(
       (n) => this.visit(n) as SetOperation,
     );
@@ -520,17 +562,27 @@ export class CdsVisitor extends BaseCstVisitor {
   }
 
   setOperation(ctx: Ctx): SetOperation {
-    const operator = ctx.Union
-      ? ctx.All
-        ? 'unionAll'
-        : 'union'
-      : ctx.Intersect
-        ? 'intersect'
-        : 'except';
     const statement = this.visit(
       asNodes(ctx.selectStatement)[0],
     ) as SelectStatement;
-    return { kind: 'setOperation', operator, statement };
+    return {
+      kind: 'setOperation',
+      operator: this.setOperator(ctx),
+      statement,
+    };
+  }
+
+  /** Shared `union [all]|intersect|except` operator mapping. */
+  private setOperator(ctx: Ctx): SetOperation['operator'] {
+    if (ctx.Intersect) return 'intersect';
+    if (ctx.Except) return 'except';
+    return asTokens(ctx.All).length ? 'unionAll' : 'union';
+  }
+
+  /** Visit `ctx[key][0]` when the optional subrule fired, else `undefined`. */
+  private optional<T>(ctx: Ctx, key: string): T | undefined {
+    const nodes = asNodes(ctx[key]);
+    return nodes.length ? (this.visit(nodes[0]) as T) : undefined;
   }
 
   projectionTail(ctx: Ctx): ProjectionTail {
@@ -561,7 +613,7 @@ export class CdsVisitor extends BaseCstVisitor {
   }
 
   dataSource(ctx: Ctx): DataSource {
-    const name = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
+    const name = this.visit(asNodes(ctx.dataSourcePath)[0]) as string;
     const aliasNode = asNodes(ctx.cdsName)[0] ?? asNodes(ctx.bareAliasName)[0];
     const alias = aliasNode ? (this.visit(aliasNode) as string) : undefined;
     const parameters = ctx.dataSourceParameters
@@ -574,6 +626,20 @@ export class CdsVisitor extends BaseCstVisitor {
       ...(alias && { alias }),
       ...(parameters && { parameters }),
     };
+  }
+
+  /** `<seg>[<attr>].<seg>…` — data-source path with raw bracket text kept. */
+  dataSourcePath(ctx: Ctx): string {
+    return asNodes(ctx.pathSegment)
+      .map((segment) => {
+        const segCtx = segment.children as Ctx;
+        const seg = this.visit(asNodes(segCtx.cdsName)[0]) as string;
+        const brackets = asNodes(segCtx.bracketTokens)
+          .map((b) => toRawText(b))
+          .join('');
+        return seg + brackets;
+      })
+      .join('.');
   }
 
   dataSourceParameters(ctx: Ctx): DataSourceParameter[] {
@@ -620,13 +686,10 @@ export class CdsVisitor extends BaseCstVisitor {
     joinType: JoinType;
     cardinality?: WordCardinality;
   } {
-    const joinType: JoinType = asTokens(ctx.Full).length
-      ? 'fullOuter'
-      : asTokens(ctx.Left).length
-        ? 'leftOuter'
-        : asTokens(ctx.Right).length
-          ? 'rightOuter'
-          : 'inner';
+    let joinType: JoinType = 'inner';
+    if (asTokens(ctx.Full).length) joinType = 'fullOuter';
+    else if (asTokens(ctx.Left).length) joinType = 'leftOuter';
+    else if (asTokens(ctx.Right).length) joinType = 'rightOuter';
     const cardinality = ctx.joinCardinality
       ? (this.visit(asNodes(ctx.joinCardinality)[0]) as WordCardinality)
       : undefined;
@@ -765,11 +828,9 @@ export class CdsVisitor extends BaseCstVisitor {
   }
 
   redirection(ctx: Ctx): AssociationRedirection {
-    const mode = ctx.Composition
-      ? 'compositionChild'
-      : ctx.Parent
-        ? 'parent'
-        : 'default';
+    let mode: AssociationRedirection['mode'] = 'default';
+    if (ctx.Composition) mode = 'compositionChild';
+    else if (ctx.Parent) mode = 'parent';
     const target = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
     return { mode, target };
   }
@@ -825,23 +886,9 @@ export class CdsVisitor extends BaseCstVisitor {
       ? 'association'
       : 'composition';
 
-    const cardinality = ctx.cardinality
-      ? (this.visit(asNodes(ctx.cardinality)[0]) as Cardinality)
-      : undefined;
-
-    // Word-form cardinality — at most one `cardinalWord` per branch:
-    // `of <w> X`, `of <w> to X`, `to <w> X` all give a single target word.
-    const words = asNodes(ctx.cardinalWord).map(
-      (n) => this.visit(n) as CardinalityWord,
-    );
-    let wordCardinality: WordCardinality | undefined;
-    let targetMultiplicity: 'many' | 'one' | undefined;
-    if (words.length === 1) {
-      wordCardinality = { target: words[0] };
-      if (words[0] === 'many' || words[0] === 'one') {
-        targetMultiplicity = words[0];
-      }
-    }
+    const cardinality = this.optional<Cardinality>(ctx, 'cardinality');
+    const { wordCardinality, targetMultiplicity } = this.associationWords(ctx);
+    const { on, withDefaultFilter } = this.associationConditions(ctx);
 
     const toParent = !!asTokens(ctx.Parent).length;
     const redirected = !!asTokens(ctx.Redirected).length;
@@ -849,11 +896,6 @@ export class CdsVisitor extends BaseCstVisitor {
     const target = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
     const aliasNode = asNodes(ctx.cdsName)[0];
     const alias = aliasNode ? (this.visit(aliasNode) as string) : undefined;
-    const conditions = asNodes(ctx.condition);
-    const on = conditions[0] ? toExpression(conditions[0]) : undefined;
-    const withDefaultFilter = conditions[1]
-      ? toExpression(conditions[1])
-      : undefined;
 
     return {
       kind: 'association',
@@ -869,6 +911,45 @@ export class CdsVisitor extends BaseCstVisitor {
       ...(on && { on }),
       ...(withDefaultFilter && { withDefaultFilter }),
     };
+  }
+
+  /**
+   * Word-form cardinality — at most one `cardinalWord` per branch:
+   * `of <w> X`, `of <w> to X`, `to <w> X` all give a single target word.
+   */
+  private associationWords(ctx: Ctx): {
+    wordCardinality?: WordCardinality;
+    targetMultiplicity?: 'many' | 'one';
+  } {
+    const words = asNodes(ctx.cardinalWord).map(
+      (n) => this.visit(n) as CardinalityWord,
+    );
+    if (words.length !== 1) return {};
+    const word = words[0];
+    return {
+      wordCardinality: { target: word },
+      ...((word === 'many' || word === 'one') && {
+        targetMultiplicity: word,
+      }),
+    };
+  }
+
+  /**
+   * `on` and `with default filter` are both optional and share
+   * `ctx.condition` — select by their keyword token, not by index.
+   */
+  private associationConditions(ctx: Ctx): {
+    on?: Expression;
+    withDefaultFilter?: Expression;
+  } {
+    const conditions = asNodes(ctx.condition);
+    const hasOn = asTokens(ctx.On).length > 0;
+    const on = hasOn ? toExpression(conditions[0]) : undefined;
+    let withDefaultFilter: Expression | undefined;
+    if (asTokens(ctx.Filter).length > 0) {
+      withDefaultFilter = toExpression(conditions[hasOn ? 1 : 0]);
+    }
+    return { on, withDefaultFilter };
   }
 
   cardinality(ctx: Ctx): Cardinality {
@@ -999,52 +1080,35 @@ export class CdsVisitor extends BaseCstVisitor {
       ? (this.visit(asNodes(ctx.cdsName)[1]) as string)
       : undefined;
 
-    const period = ctx.hierarchyPeriod
-      ? (this.visit(asNodes(ctx.hierarchyPeriod)[0]) as HierarchyPeriod)
-      : undefined;
-    const directory = ctx.hierarchyDirectory
-      ? (this.visit(asNodes(ctx.hierarchyDirectory)[0]) as {
-          entity: string;
-          filter: Expression;
-        })
-      : undefined;
-    const startWhere = ctx.hierarchyStart
-      ? (this.visit(asNodes(ctx.hierarchyStart)[0]) as Expression)
-      : undefined;
+    const period = this.optional<HierarchyPeriod>(ctx, 'hierarchyPeriod');
+    const directory = this.optional<{ entity: string; filter: Expression }>(
+      ctx,
+      'hierarchyDirectory',
+    );
+    const startWhere = this.optional<Expression>(ctx, 'hierarchyStart');
 
     const siblingsOrderBy = asNodes(ctx.sortItem).map(
       (n) => this.visit(n) as SortItem,
     );
 
-    const depth = ctx.hierarchyDepth
-      ? (this.visit(asNodes(ctx.hierarchyDepth)[0]) as string)
-      : undefined;
-    const nodetype = ctx.hierarchyNodetype
-      ? (this.visit(asNodes(ctx.hierarchyNodetype)[0]) as string)
-      : undefined;
-    const load = ctx.hierarchyLoad
-      ? (this.visit(asNodes(ctx.hierarchyLoad)[0]) as string)
-      : undefined;
-    const multipleParents = ctx.hierarchyMultiple
-      ? (this.visit(
-          asNodes(ctx.hierarchyMultiple)[0],
-        ) as HierarchyDefinition['multipleParents'])
-      : undefined;
-    const orphans = ctx.hierarchyOrphans
-      ? (this.visit(
-          asNodes(ctx.hierarchyOrphans)[0],
-        ) as HierarchyDefinition['orphans'])
-      : undefined;
-    const cycles = ctx.hierarchyCycles
-      ? (this.visit(
-          asNodes(ctx.hierarchyCycles)[0],
-        ) as HierarchyDefinition['cycles'])
-      : undefined;
-    const cache = ctx.hierarchyCache
-      ? (this.visit(
-          asNodes(ctx.hierarchyCache)[0],
-        ) as HierarchyDefinition['cache'])
-      : undefined;
+    const depth = this.optional<string>(ctx, 'hierarchyDepth');
+    const nodetype = this.optional<string>(ctx, 'hierarchyNodetype');
+    const load = this.optional<string>(ctx, 'hierarchyLoad');
+    const multipleParents = this.optional<
+      HierarchyDefinition['multipleParents']
+    >(ctx, 'hierarchyMultiple');
+    const orphans = this.optional<HierarchyDefinition['orphans']>(
+      ctx,
+      'hierarchyOrphans',
+    );
+    const cycles = this.optional<HierarchyDefinition['cycles']>(
+      ctx,
+      'hierarchyCycles',
+    );
+    const cache = this.optional<HierarchyDefinition['cache']>(
+      ctx,
+      'hierarchyCache',
+    );
 
     const members = ctx.elementList
       ? (this.visit(asNodes(ctx.elementList)[0]) as ViewMember[])
@@ -1056,20 +1120,41 @@ export class CdsVisitor extends BaseCstVisitor {
       annotations: [],
       parameters,
       source,
-      ...(childToParentAssociation && { childToParentAssociation }),
-      ...(period && { period }),
-      ...(directory && { directory }),
-      ...(startWhere && { startWhere }),
       siblingsOrderBy,
-      ...(depth !== undefined && { depth }),
-      ...(nodetype && { nodetype }),
-      ...(load && { load }),
-      ...(multipleParents && { multipleParents }),
-      ...(orphans && { orphans }),
-      ...(cycles && { cycles }),
-      ...(ctx.hierarchyGenerate && { generateSpantree: true }),
-      ...(cache && { cache }),
       members,
+      ...(childToParentAssociation && { childToParentAssociation }),
+      ...this.hierarchyOptionals(ctx, {
+        period,
+        directory,
+        startWhere,
+        depth,
+        nodetype,
+        load,
+        multipleParents,
+        orphans,
+        cycles,
+        cache,
+      }),
+    };
+  }
+
+  /** The clause-dependent optional fields of a hierarchy definition. */
+  private hierarchyOptionals(
+    ctx: Ctx,
+    c: Partial<HierarchyDefinition>,
+  ): Partial<HierarchyDefinition> {
+    return {
+      ...(c.period && { period: c.period }),
+      ...(c.directory && { directory: c.directory }),
+      ...(c.startWhere && { startWhere: c.startWhere }),
+      ...(c.depth !== undefined && { depth: c.depth }),
+      ...(c.nodetype && { nodetype: c.nodetype }),
+      ...(c.load && { load: c.load }),
+      ...(c.multipleParents && { multipleParents: c.multipleParents }),
+      ...(c.orphans && { orphans: c.orphans }),
+      ...(c.cycles && { cycles: c.cycles }),
+      ...(ctx.hierarchyGenerate && { generateSpantree: true }),
+      ...(c.cache && { cache: c.cache }),
     };
   }
 
@@ -1145,11 +1230,9 @@ export class CdsVisitor extends BaseCstVisitor {
 
   sortItem(ctx: Ctx): SortItem {
     const name = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
-    const direction = asTokens(ctx.Descending).length
-      ? 'descending'
-      : asTokens(ctx.Ascending).length
-        ? 'ascending'
-        : undefined;
+    let direction: SortItem['direction'];
+    if (asTokens(ctx.Descending).length) direction = 'descending';
+    else if (asTokens(ctx.Ascending).length) direction = 'ascending';
     return { name, ...(direction && { direction }) };
   }
 
@@ -1289,11 +1372,9 @@ export class CdsVisitor extends BaseCstVisitor {
   grantCombination(ctx: Ctx): {
     combinationMode: 'or' | 'and' | 'redefinition';
   } {
-    const combinationMode = ctx.Redefinition
-      ? 'redefinition'
-      : ctx.Or
-        ? 'or'
-        : 'and';
+    let combinationMode: 'or' | 'and' | 'redefinition' = 'and';
+    if (ctx.Redefinition) combinationMode = 'redefinition';
+    else if (ctx.Or) combinationMode = 'or';
     return { combinationMode };
   }
 
@@ -1303,11 +1384,10 @@ export class CdsVisitor extends BaseCstVisitor {
     inheritCondition?: Expression;
   } {
     const inheritRole = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
-    const inheritConditionConnector = ctx.dclCondition
-      ? asTokens(ctx.And).length
-        ? ('and' as const)
-        : ('or' as const)
-      : undefined;
+    let inheritConditionConnector: 'and' | 'or' | undefined;
+    if (ctx.dclCondition) {
+      inheritConditionConnector = asTokens(ctx.And).length ? 'and' : 'or';
+    }
     return {
       inheritRole,
       ...(inheritConditionConnector && { inheritConditionConnector }),
@@ -1369,11 +1449,9 @@ export class CdsVisitor extends BaseCstVisitor {
     const names = asNodes(ctx.qualifiedName).map(
       (n) => this.visit(n) as string,
     );
-    const targetKind: ExtensionDefinition['targetKind'] = ctx.View
-      ? 'view'
-      : ctx.Abstract
-        ? 'abstract'
-        : 'custom';
+    let targetKind: ExtensionDefinition['targetKind'] = 'custom';
+    if (ctx.View) targetKind = 'view';
+    else if (ctx.Abstract) targetKind = 'abstract';
     const isViewEntity = !!asTokens(ctx.Entity).length;
     const name = names[0] ?? '';
     const associations = asNodes(ctx.associationTail).map(
@@ -1400,17 +1478,14 @@ export class CdsVisitor extends BaseCstVisitor {
   }
 
   extendSetOperation(ctx: Ctx): ExtendSetOperation {
-    const operator = ctx.Union
-      ? ctx.All
-        ? 'unionAll'
-        : 'union'
-      : ctx.Intersect
-        ? 'intersect'
-        : 'except';
     const members = ctx.elementList
       ? (this.visit(asNodes(ctx.elementList)[0]) as ViewMember[])
       : [];
-    return { kind: 'extendSetOperation', operator, members };
+    return {
+      kind: 'extendSetOperation',
+      operator: this.setOperator(ctx),
+      members,
+    };
   }
 
   // ---- Metadata extensions --------------------------------------

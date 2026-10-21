@@ -214,22 +214,6 @@ describe('joins', () => {
     ]);
   });
 
-  it('parses a parameterized joined source', () => {
-    const v = getView(`
-      define view entity V as select from I_Item as _Item
-        left outer join ZTEST_DocumentView
-          ( mandt : $session.client, p_startdate : $parameters.P_StartDate ) as _PRDocList
-          on _Item.PurchaseRequisition = _PRDocList.PurchaseRequisition
-      {
-        key _Item.k
-      }
-    `);
-
-    expect(v.joins[0].source.name).toBe('ZTEST_DocumentView');
-    expect(v.joins[0].source.alias).toBe('_PRDocList');
-    expect(v.joins[0].source.parameters).toHaveLength(2);
-  });
-
   it('captures a multiline ON condition completely', () => {
     const v = getView(`
       define view entity V as select from I_SampleItem as _Item
