@@ -115,6 +115,9 @@ export type {
 
 export type { CdsParseError } from './errors';
 
+// Canonical serialization of conditions
+export { serializeExpr } from './serialize';
+
 // AST walker helpers
 export {
   walkDefinitions,

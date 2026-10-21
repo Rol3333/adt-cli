@@ -1,17 +1,13 @@
 /// <reference types="vitest/globals" />
 // Vitest globals are enabled for this package (see vitest.config.ts).
 import { readFileSync } from 'node:fs';
-import { parse } from '../../src/index';
+import { parse, serializeExpr } from '../../src/index';
 import type { ViewEntityDefinition, ViewElement } from '../../src/ast';
 
 function getView(src: string): ViewEntityDefinition {
   const r = parse(src);
   expect(r.errors).toHaveLength(0);
   return r.ast.definitions[0] as ViewEntityDefinition;
-}
-
-function cond(source: string | undefined): string {
-  return (source ?? '').replace(/\s+/g, '');
 }
 
 describe('legacy views and projection expressions', () => {
@@ -158,8 +154,8 @@ describe('legacy views and projection expressions', () => {
     `);
 
     expect(v.where).toBeDefined();
-    expect(cond(v.where?.source)).toBe(
-      'A.xisnullandA.yisnotinitialandA.zisnotnull',
+    expect(serializeExpr(v.where!)).toBe(
+      'A.x is null and A.y is not initial and A.z is not null',
     );
   });
 

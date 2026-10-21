@@ -1,18 +1,13 @@
 /// <reference types="vitest/globals" />
 // Vitest globals are enabled for this package (see vitest.config.ts).
 import { readFileSync } from 'node:fs';
-import { parse } from '../../src/index';
+import { parse, serializeExpr } from '../../src/index';
 import type { ViewEntityDefinition } from '../../src/ast';
 
 function getView(src: string): ViewEntityDefinition {
   const r = parse(src);
   expect(r.errors).toHaveLength(0);
   return r.ast.definitions[0] as ViewEntityDefinition;
-}
-
-/** The captured condition without the token spacing of the flat token list. */
-function cond(source: string | undefined): string {
-  return (source ?? '').replace(/\s+/g, '');
 }
 
 describe('joins', () => {
@@ -28,7 +23,7 @@ describe('joins', () => {
     expect(v.joins).toHaveLength(1);
     expect(v.joins[0].joinType).toBe('inner');
     expect(v.joins[0].source.name).toBe('B');
-    expect(cond(v.joins[0].on?.source)).toBe('A.k=B.k');
+    expect(serializeExpr(v.joins[0].on!)).toBe('A.k = B.k');
   });
 
   it('normalizes INNER JOIN to inner', () => {
@@ -241,9 +236,9 @@ describe('joins', () => {
       }
     `);
 
-    expect(cond(v.joins[0].on?.source)).toBe(
-      '_Item.PurchaseRequisition=_Inv.PurchaseRequisition' +
-        'and_Item.PurchaseRequisitionItem=_Inv.PurchaseRequisitionItem',
+    expect(serializeExpr(v.joins[0].on!)).toBe(
+      '_Item.PurchaseRequisition = _Inv.PurchaseRequisition' +
+        ' and _Item.PurchaseRequisitionItem = _Inv.PurchaseRequisitionItem',
     );
   });
 
@@ -263,14 +258,14 @@ describe('joins', () => {
       }
     `);
 
-    expect(cond(v.joins[0].on?.source)).toBe(
-      '_Item.CreatedByUser=p1.usrid' +
-        'andp1.begda<=_Item.CreationDate' +
-        'andp1.endda>=_Item.CreationDate' +
-        "andp1.subty='0001'",
+    expect(serializeExpr(v.joins[0].on!)).toBe(
+      '_Item.CreatedByUser = p1.usrid' +
+        ' and p1.begda <= _Item.CreationDate' +
+        ' and p1.endda >= _Item.CreationDate' +
+        " and p1.subty = '0001'",
     );
-    expect(cond(v.joins[1].on?.source)).toBe(
-      'p1.pernr=p2.pernrorp2.pernr=p1.pernr',
+    expect(serializeExpr(v.joins[1].on!)).toBe(
+      'p1.pernr = p2.pernr or p2.pernr = p1.pernr',
     );
   });
 
@@ -285,9 +280,9 @@ describe('joins', () => {
       }
     `);
 
-    expect(cond(v.joins[0].on?.source)).toBe(
-      '(_Item.k=_Other.kor_Item.x=_Other.x)' +
-        'and_Item.y=coalesce(_Other.y,_Other.z)',
+    expect(serializeExpr(v.joins[0].on!)).toBe(
+      '(_Item.k = _Other.k or _Item.x = _Other.x)' +
+        ' and _Item.y = coalesce(_Other.y, _Other.z)',
     );
   });
 

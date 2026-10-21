@@ -1,6 +1,6 @@
 /// <reference types="vitest/globals" />
 // Vitest globals are enabled for this package (see vitest.config.ts).
-import { parse } from '../../src/index';
+import { parse, serializeExpr } from '../../src/index';
 import type {
   AssociationDeclaration,
   ViewEntityDefinition,
@@ -10,10 +10,6 @@ function getView(src: string): ViewEntityDefinition {
   const r = parse(src);
   expect(r.errors).toHaveLength(0);
   return r.ast.definitions[0] as ViewEntityDefinition;
-}
-
-function cond(source: string | undefined): string {
-  return (source ?? '').replace(/\s+/g, '');
 }
 
 describe('FROM-clause associations', () => {
@@ -33,8 +29,8 @@ describe('FROM-clause associations', () => {
     expect(a.target).toBe('ZTEST_LastRelease');
     expect(a.alias).toBe('_LastRelease');
     expect(a.cardinality).toEqual({ min: 0, max: 1 });
-    expect(cond(a.on?.source)).toBe(
-      '_LastRelease.PurchaseRequisition=_Item.PurchaseRequisition',
+    expect(serializeExpr(a.on!)).toBe(
+      '_LastRelease.PurchaseRequisition = _Item.PurchaseRequisition',
     );
   });
 
@@ -49,7 +45,7 @@ describe('FROM-clause associations', () => {
     `);
 
     const a = v.fromAssociations?.[0] as AssociationDeclaration;
-    expect(cond(a.on?.source)).toBe('$projection.Product=_Product.Product');
+    expect(serializeExpr(a.on!)).toBe('$projection.Product = _Product.Product');
   });
 
   it('captures a multiline $projection condition', () => {
@@ -65,10 +61,10 @@ describe('FROM-clause associations', () => {
     `);
 
     const a = v.fromAssociations?.[0] as AssociationDeclaration;
-    expect(cond(a.on?.source)).toBe(
-      '$projection.PurchaseRequisition=_Assgmt.PurchaseRequisition' +
-        'and$projection.PurchaseRequisitionItem=_Assgmt.PurchaseRequisitionItem' +
-        "and_Assgmt.PurchaseReqnAcctAssgmtNumber='01'",
+    expect(serializeExpr(a.on!)).toBe(
+      '$projection.PurchaseRequisition = _Assgmt.PurchaseRequisition' +
+        ' and $projection.PurchaseRequisitionItem = _Assgmt.PurchaseRequisitionItem' +
+        " and _Assgmt.PurchaseReqnAcctAssgmtNumber = '01'",
     );
   });
 
