@@ -14,6 +14,7 @@
  * `src/lib/grammar/`.
  */
 import { CstParser } from 'chevrotain';
+import type { TokenType } from 'chevrotain';
 import {
   allTokens,
   At,
@@ -89,6 +90,74 @@ import {
 } from './tokens';
 
 export class CdsParser extends CstParser {
+  /**
+   * All token types that may be used as a CDS name.
+   *
+   * The list is the single source of truth for the `cdsName` rule and for the
+   * bare-alias rule — the latter is derived from it by removing the
+   * FROM-region starters.
+   */
+  private static readonly NAME_TOKENS: readonly TokenType[] = [
+    Identifier,
+    Table,
+    Structure,
+    Type,
+    Service,
+    Expose,
+    Entity,
+    Key,
+    View,
+    Role,
+    Association,
+    Composition,
+    Abstract,
+    Custom,
+    Virtual,
+    Redirected,
+    Default,
+    Parameters,
+    Grant,
+    Many,
+    One,
+    Of,
+    Projection,
+    Select,
+    From,
+    To,
+    Where,
+    // The join keywords are reserved words, but they are still valid
+    // identifiers in name positions (`A.left`, `as inner`, …).
+    Join,
+    Inner,
+    Left,
+    Right,
+    Outer,
+    Cross,
+  ];
+
+  /**
+   * Tokens that may start an item of the FROM region.
+   *
+   * A *bare* (implicit) source alias must not be one of them, otherwise the
+   * alias would swallow the token that starts the next FROM item — e.g.
+   * `from A association [0..1] to B …` would read `association` as the alias.
+   * An explicit `as <alias>` stays unrestricted (`from A as left`).
+   *
+   * `outer` is deliberately **not** part of the set: it can never start a
+   * FROM item (it always follows `left` / `right`), so excluding it would
+   * only needlessly forbid a bare alias named `outer`.
+   */
+  private static readonly FROM_REGION_STARTERS: ReadonlySet<TokenType> =
+    new Set<TokenType>([
+      Association,
+      Composition,
+      Join,
+      Inner,
+      Left,
+      Right,
+      Cross,
+    ]);
+
   constructor() {
     super(allTokens, {
       recoveryEnabled: true,
@@ -261,8 +330,20 @@ export class CdsParser extends CstParser {
       this.SUBRULE(this.dataSourceParameters);
     });
     this.OPTION2(() => {
-      this.OPTION3(() => this.CONSUME(As));
-      this.SUBRULE(this.cdsName);
+      this.OR([
+        {
+          // An explicit alias is never ambiguous.
+          ALT: () => {
+            this.CONSUME(As);
+            this.SUBRULE(this.cdsName);
+          },
+        },
+        {
+          // A bare (implicit) alias — the FROM-region starters are excluded,
+          // see FROM_REGION_STARTERS.
+          ALT: () => this.SUBRULE(this.bareAliasName),
+        },
+      ]);
     });
   });
 
@@ -861,7 +942,7 @@ export class CdsParser extends CstParser {
    * (including the commas inside them) are not truncated.
    */
   private readonly pathOperand = this.RULE('pathOperand', () => {
-    this.SUBRULE(this.functionPath);
+    this.SUBRULE(this.qualifiedName);
     this.OPTION(() => {
       this.CONSUME(LParen);
       this.OPTION2(() => {
@@ -873,33 +954,6 @@ export class CdsParser extends CstParser {
       });
       this.CONSUME(RParen);
     });
-  });
-
-  /** `<name>[.<name>...]` — the name may also be a reserved word. */
-  private readonly functionPath = this.RULE('functionPath', () => {
-    this.SUBRULE(this.functionName);
-    this.MANY(() => {
-      this.CONSUME(Dot);
-      this.SUBRULE2(this.cdsName);
-    });
-  });
-
-  /**
-   * A name that may also be one of the reserved join words.
-   *
-   * CDS uses `left( … )` / `right( … )` as string functions, so the join
-   * keywords have to stay usable as function names.
-   */
-  private readonly functionName = this.RULE('functionName', () => {
-    this.OR([
-      { ALT: () => this.SUBRULE(this.cdsName) },
-      { ALT: () => this.CONSUME(Join) },
-      { ALT: () => this.CONSUME(Inner) },
-      { ALT: () => this.CONSUME(Left) },
-      { ALT: () => this.CONSUME(Right) },
-      { ALT: () => this.CONSUME(Outer) },
-      { ALT: () => this.CONSUME(Cross) },
-    ]);
   });
 
   /** `( <expression> )` — a parenthesized sub-condition. */
@@ -956,36 +1010,27 @@ export class CdsParser extends CstParser {
 
   /** An identifier that may also be a keyword used as a name. */
   private readonly cdsName = this.RULE('cdsName', () => {
-    this.OR([
-      { ALT: () => this.CONSUME(Identifier) },
-      // Keywords permitted as names (common CDS identifier collisions).
-      { ALT: () => this.CONSUME(Table) },
-      { ALT: () => this.CONSUME(Structure) },
-      { ALT: () => this.CONSUME(Type) },
-      { ALT: () => this.CONSUME(Service) },
-      { ALT: () => this.CONSUME(Entity) },
-      { ALT: () => this.CONSUME(Key) },
-      { ALT: () => this.CONSUME(Expose) },
-      { ALT: () => this.CONSUME(View) },
-      { ALT: () => this.CONSUME(Role) },
-      { ALT: () => this.CONSUME(Association) },
-      { ALT: () => this.CONSUME(Composition) },
-      { ALT: () => this.CONSUME(Abstract) },
-      { ALT: () => this.CONSUME(Custom) },
-      { ALT: () => this.CONSUME(Virtual) },
-      { ALT: () => this.CONSUME(Redirected) },
-      { ALT: () => this.CONSUME(Default) },
-      { ALT: () => this.CONSUME(Parameters) },
-      { ALT: () => this.CONSUME(Grant) },
-      { ALT: () => this.CONSUME(Many) },
-      { ALT: () => this.CONSUME(One) },
-      { ALT: () => this.CONSUME(Of) },
-      { ALT: () => this.CONSUME(Projection) },
-      { ALT: () => this.CONSUME(Select) },
-      { ALT: () => this.CONSUME(From) },
-      { ALT: () => this.CONSUME(To) },
-      { ALT: () => this.CONSUME(Where) },
-    ]);
+    this.OR(
+      CdsParser.NAME_TOKENS.map((tokenType) => ({
+        ALT: () => this.CONSUME(tokenType),
+      })),
+    );
+  });
+
+  /**
+   * A name usable as an *implicit* (bare) source alias.
+   *
+   * It is `cdsName` without the FROM-region starters — those tokens belong
+   * to the next item of the FROM region and must not be read as an alias.
+   */
+  private readonly bareAliasName = this.RULE('bareAliasName', () => {
+    this.OR(
+      CdsParser.NAME_TOKENS.filter(
+        (tokenType) => !CdsParser.FROM_REGION_STARTERS.has(tokenType),
+      ).map((tokenType) => ({
+        ALT: () => this.CONSUME(tokenType),
+      })),
+    );
   });
 
   /** Dot-separated qualified name: foo.bar.baz */

@@ -708,14 +708,6 @@ export class CdsVisitor extends BaseCstVisitor {
     return null;
   }
 
-  functionPath(): unknown {
-    return null;
-  }
-
-  functionName(): unknown {
-    return null;
-  }
-
   parenthesizedExpression(): unknown {
     return null;
   }
@@ -764,6 +756,10 @@ export class CdsVisitor extends BaseCstVisitor {
       if (tok && 'image' in tok) return tok.image;
     }
     return '';
+  }
+
+  bareAliasName(ctx: Ctx): string {
+    return this.cdsName(ctx);
   }
 
   qualifiedName(ctx: Ctx): string {

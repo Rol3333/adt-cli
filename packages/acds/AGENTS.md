@@ -87,7 +87,7 @@ In `tokens.ts`:
 
 CDS sources commonly use keywords as identifiers (e.g. `@ObjectModel.association.type`). The `cdsName` rule in the parser accepts every keyword that can legally appear as a name. When adding a new keyword, **append it to the `cdsName` rule** if it might be used as an identifier anywhere.
 
-**Exception — the join keywords** (`join`, `inner`, `left`, `right`, `outer`, `cross`) are deliberately **not** part of `cdsName`. The optional alias of a data source is parsed as `[as] <cdsName>`; if the join keywords were accepted as names, the alias would swallow the `join` that starts the next join clause. Keep them out of `cdsName` unless the grammar is restructured (e.g. with a dedicated `dataSourceAlias` rule).
+**Exception — the join keywords** (`join`, `inner`, `left`, `right`, `outer`, `cross`) **are** part of `cdsName` (they are reserved words, but still valid identifiers in name positions such as `A.left` or `as inner`). To keep them out of the _implicit_ (bare) source alias, the parser keeps a single exclusion set (`CdsParser.FROM_REGION_STARTERS`) and derives the `bareAliasName` rule from `CdsParser.NAME_TOKENS` minus that set. An explicit `as <alias>` stays unrestricted.
 
 ### Parser Rules
 
