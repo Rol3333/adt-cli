@@ -10,7 +10,8 @@ Parses `.acds` (ABAP CDS DDL) source code into a fully typed Abstract Syntax Tre
 
 | CDS Construct   | AST Node                   | Example                                                                       |
 | --------------- | -------------------------- | ----------------------------------------------------------------------------- |
-| Table           | `TableDefinition`          | `define [root] table [entity] ztable { ... }`                                 |
+| Table           | `TableDefinition`          | `define table [entity] ztable { ... }`                                        |
+| Root table ent. | `TableDefinition`          | `define root table entity ztable { ... }`                                     |
 | Structure       | `StructureDefinition`      | `define structure zstruct { ... }`                                            |
 | Simple type     | `SimpleTypeDefinition`     | `define type ztype : abap.char(10);`                                          |
 | View entity     | `ViewEntityDefinition`     | `define [root] view entity zv as select ...`                                  |
