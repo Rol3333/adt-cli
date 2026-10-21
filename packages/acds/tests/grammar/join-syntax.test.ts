@@ -1,6 +1,6 @@
 /// <reference types="vitest/globals" />
 // Vitest globals are enabled for this package (see vitest.config.ts).
-import { parse } from '../../src/index';
+import { parse, serializeExpr } from '../../src/index';
 import type { JoinType, ViewEntityDefinition } from '../../src/ast';
 
 function getView(src: string): ViewEntityDefinition {
@@ -243,6 +243,6 @@ describe('join syntax', () => {
     expect(v.joins[0].source.parameters).toEqual([
       { name: 'P_StartDate', value: ':P_StartDate' },
     ]);
-    expect(v.joins[0].on?.tokens).toContain('=');
+    expect(serializeExpr(v.joins[0].on!)).toBe('A.ID = _C.ID');
   });
 });

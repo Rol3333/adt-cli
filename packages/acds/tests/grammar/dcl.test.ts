@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parse } from '../../src/index';
+import { parse, serializeExpr } from '../../src/index';
 import type { RoleDefinition } from '../../src/ast';
 
 describe('DCL — role / grant', () => {
@@ -27,7 +27,7 @@ describe('DCL — role / grant', () => {
     expect(r.errors).toHaveLength(0);
     const role = r.ast.definitions[0] as RoleDefinition;
     expect(role.grants[0].where).toBeDefined();
-    expect(role.grants[0].where?.source).toContain('carrid');
+    expect(serializeExpr(role.grants[0].where!)).toContain('carrid');
   });
 
   it('parses role with multiple grants', () => {

@@ -59,16 +59,13 @@ export const joinsCoverage: GrammarCoverage = {
     'ON condition with parentheses and nested call arguments',
     'ON condition with `is null` / `is not initial` predicates',
     'ON condition with a system variable ($projection.Field)',
+    'ON condition as a structured expression tree (see the `expressions` topic)',
 
     // --- known limitations (rejected by the parser) ---
     'CROSS JOIN with an ON condition',
     'INNER / LEFT / RIGHT / FULL JOIN without an ON condition',
-    'NOT in an ON predicate',
-    'LIKE in an ON predicate',
-    'arithmetic operand in an ON predicate (B.k + 1)',
 
     // --- not yet verified ---
     'BETWEEN in an ON predicate',
-    'IN in an ON predicate',
   ],
 };

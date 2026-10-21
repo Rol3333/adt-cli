@@ -190,20 +190,156 @@ export interface ParameterDefinition extends AstNode {
 }
 
 // ============================================
-// Expressions (narrow subset)
+// Expressions
 // ============================================
 
 /**
- * A parsed but un-interpreted expression from `on` / `where` clauses.
- * Consumers typically only need the raw source span; `tokens` gives the
- * flat token stream for lightweight introspection.
+ * A path to a data-source field: `_Item.Field`, `_Item._Assoc.Field`.
  */
-export interface Expression extends AstNode {
-  /** Flattened source image of the expression (concatenated token images, space-separated). */
-  source: string;
-  /** Token images in order. */
-  tokens: string[];
+export interface FieldRefExpr extends AstNode {
+  kind: 'fieldRef';
+  /** The path segments, e.g. `['_Item', 'Field']`. */
+  path: string[];
 }
+
+/**
+ * `$projection.Element` — an element of the current view.
+ *
+ * It is **not** a field of the data source: a lineage tool has to treat it
+ * differently from {@link FieldRefExpr}.
+ */
+export interface ProjectionRefExpr extends AstNode {
+  kind: 'projectionRef';
+  /** The element name without the `$projection.` prefix. */
+  name: string;
+}
+
+/** `$parameters.P_X` — a parameter of the consuming view. */
+export interface ParamRefExpr extends AstNode {
+  kind: 'paramRef';
+  /** The parameter name without the `$parameters.` prefix. */
+  name: string;
+}
+
+/** `$session.client`, `$session.system_language`. */
+export interface SessionVarExpr extends AstNode {
+  kind: 'sessionVar';
+  /** The variable name without the `$session.` prefix. */
+  name: string;
+}
+
+export type LiteralKind = 'string' | 'number' | 'boolean' | 'null';
+
+/** A literal value. `value` is omitted for the `null` literal. */
+export interface LiteralExpr extends AstNode {
+  kind: 'literal';
+  literal: LiteralKind;
+  value?: string | number | boolean;
+}
+
+/**
+ * Binary operators.
+ *
+ * The set is frozen: arithmetic is part of the vocabulary from the start, so
+ * that the AST type does not have to change when the grammar grows.
+ */
+export type BinaryOp =
+  | 'eq'
+  | 'ne'
+  | 'lt'
+  | 'le'
+  | 'gt'
+  | 'ge'
+  | 'and'
+  | 'or'
+  | 'like'
+  | 'add'
+  | 'sub'
+  | 'mul'
+  | 'div';
+
+export interface BinaryExpr extends AstNode {
+  kind: 'binary';
+  op: BinaryOp;
+  left: Expr;
+  right: Expr;
+}
+
+/** `not <operand>` */
+export interface NotExpr extends AstNode {
+  kind: 'not';
+  operand: Expr;
+}
+
+/** `<operand> is null` / `<operand> is not null` */
+export interface IsNullExpr extends AstNode {
+  kind: 'isNull';
+  operand: Expr;
+  /** `true` for `is not null`. */
+  negated: boolean;
+}
+
+/** `<operand> is initial` / `<operand> is not initial` */
+export interface IsInitialExpr extends AstNode {
+  kind: 'isInitial';
+  operand: Expr;
+  /** `true` for `is not initial`. */
+  negated: boolean;
+}
+
+/**
+ * `<operand> in (a, b, …)` / `<operand> not in (a, b, …)`.
+ *
+ * The right-hand side is an explicit value list — it is not a binary
+ * expression.
+ */
+export interface InExpr extends AstNode {
+  kind: 'in';
+  operand: Expr;
+  values: Expr[];
+  /** `true` for `not in`. */
+  negated?: boolean;
+}
+
+/** An ordinary function call: `coalesce(a, b)`, `division(x, y, 2)`. */
+export interface CallExpr extends AstNode {
+  kind: 'call';
+  name: string;
+  args: Expr[];
+}
+
+/**
+ * `cast(<value> as <type> [preserving type])`.
+ *
+ * A cast is not an ordinary call — it carries a target type and a flag.
+ */
+export interface CastExpr extends AstNode {
+  kind: 'cast';
+  expression: Expr;
+  targetType: string;
+  preservingType?: boolean;
+}
+
+/**
+ * A structured expression.
+ *
+ * The AST is structural, not a source mirror: whitespace and the original
+ * spelling are not preserved. The canonical text form is produced by
+ * `serializeExpr()`.
+ */
+export type Expr =
+  | FieldRefExpr
+  | ProjectionRefExpr
+  | ParamRefExpr
+  | SessionVarExpr
+  | LiteralExpr
+  | BinaryExpr
+  | NotExpr
+  | IsNullExpr
+  | IsInitialExpr
+  | InExpr
+  | CallExpr
+  | CastExpr;
 
 // ============================================
 // Associations
@@ -231,7 +367,7 @@ export interface AssociationDeclaration extends AstNode {
   /** `to redirected to <target>` (projection association). */
   redirected?: boolean;
   alias?: string;
-  on?: Expression;
+  on?: Expr;
 }
 
 // ============================================
@@ -291,8 +427,8 @@ export interface JoinClause extends AstNode {
   joinType: JoinType;
   /** The joined data source (with optional alias and parameters). */
   source: DataSource;
-  /** The `ON` condition, captured opaquely. */
-  on?: Expression;
+  /** The `ON` condition. */
+  on?: Expr;
 }
 
 /** Single element in a view's projection list. */
@@ -337,7 +473,7 @@ export interface ViewEntityDefinition extends AstNode {
   parameters: ParameterDefinition[];
   members: ViewMember[];
   /** Top-level filter clause (`where ...`). */
-  where?: Expression;
+  where?: Expr;
 }
 
 export interface AbstractEntityDefinition extends AstNode {
@@ -365,7 +501,7 @@ export interface GrantStatement extends AstNode {
   privilege: 'select';
   /** Target entity (qualified). */
   entity: string;
-  where?: Expression;
+  where?: Expr;
 }
 
 export interface RoleDefinition extends AstNode {

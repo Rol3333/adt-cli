@@ -75,6 +75,10 @@ import {
   Outer,
   And,
   Or,
+  Is,
+  Initial,
+  In,
+  Like,
   Identifier,
   StringLiteral,
   NumberLiteral,
@@ -87,6 +91,9 @@ import {
   Lt,
   Gt,
   Star,
+  Plus,
+  Minus,
+  Slash,
   Dollar,
 } from './tokens';
 
@@ -135,6 +142,14 @@ export class CdsParser extends CstParser {
     Outer,
     Cross,
     Full,
+    // The expression keywords are valid identifiers as well (`A.is`, `A.in`).
+    // `not`, `and`, `or`, `true` and `false` are deliberately **not** part of
+    // the list: they start an operator or a literal and would make the
+    // expression grammar ambiguous.
+    Is,
+    Initial,
+    In,
+    Like,
   ];
 
   /**
@@ -266,7 +281,7 @@ export class CdsParser extends CstParser {
       // optional where at top-level of view (consume expression if present)
       this.OPTION4(() => {
         this.CONSUME(Where);
-        this.SUBRULE(this.expression);
+        this.SUBRULE(this.orExpression);
       });
     },
   );
@@ -502,7 +517,7 @@ export class CdsParser extends CstParser {
   private readonly joinSource = this.RULE('joinSource', () => {
     this.SUBRULE(this.dataSource);
     this.CONSUME(On);
-    this.SUBRULE(this.expression);
+    this.SUBRULE(this.orExpression);
   });
 
   // ============================================================
@@ -577,7 +592,7 @@ export class CdsParser extends CstParser {
           GATE: () => this.isCastExpression(),
           ALT: () => this.SUBRULE(this.castExpression),
         },
-        { ALT: () => this.SUBRULE(this.pathOperand) },
+        { ALT: () => this.SUBRULE(this.projectionOperand) },
       ]);
       this.OPTION(() => {
         this.CONSUME(As);
@@ -590,7 +605,7 @@ export class CdsParser extends CstParser {
   private readonly castExpression = this.RULE('castExpression', () => {
     this.CONSUME(Identifier); // `cast`
     this.CONSUME(LParen);
-    this.SUBRULE(this.operand);
+    this.SUBRULE(this.primaryExpression);
     this.CONSUME(As);
     this.SUBRULE(this.typeReference);
     this.OPTION(() => {
@@ -667,7 +682,7 @@ export class CdsParser extends CstParser {
     });
     this.OPTION6(() => {
       this.CONSUME(On);
-      this.SUBRULE(this.expression);
+      this.SUBRULE(this.orExpression);
     });
     this.OPTION7(() => {
       this.OR4([
@@ -787,7 +802,7 @@ export class CdsParser extends CstParser {
     this.SUBRULE(this.qualifiedName);
     this.OPTION(() => {
       this.CONSUME(Where);
-      this.SUBRULE(this.expression);
+      this.SUBRULE(this.orExpression);
     });
     this.CONSUME(Semicolon);
   });
@@ -935,74 +950,143 @@ export class CdsParser extends CstParser {
   });
 
   // ============================================================
-  // Expressions (narrow subset: operands + binary comparisons + AND/OR)
-  // Used by `on` / `where` clauses. Expression trees are intentionally
-  // kept opaque — consumers see a flat token list through the visitor.
+  // Expressions
+  //
+  // The grammar mirrors the SQL precedence:
+  //
+  //   orExpression            andExpression / orExpression
+  //   andExpression           notExpression ( AND notExpression )*
+  //   notExpression           [ NOT ] comparisonExpression
+  //   comparisonExpression    additiveExpression [ <op> additiveExpression
+  //                                          | [NOT] IN ( <values> )
+  //                                          | IS [NOT] ( NULL | INITIAL ) ]
+  //   additiveExpression      multiplicativeExpression ( ( + | - ) … )*
+  //   multiplicativeExpression primaryExpression ( ( * | / ) … )*
+  //   primaryExpression       ( <expression> ) | <operand> | <system variable>
+  //                                       | <literal>
+  //
+  // The shape of the condition is encoded in the CST — the visitor only maps
+  // the CST to the AST.
   // ============================================================
 
-  private readonly expression = this.RULE('expression', () => {
-    this.SUBRULE(this.comparison);
+  private readonly orExpression = this.RULE('orExpression', () => {
+    this.SUBRULE(this.andExpression);
+    this.MANY(() => {
+      this.CONSUME(Or);
+      this.SUBRULE2(this.andExpression);
+    });
+  });
+
+  private readonly andExpression = this.RULE('andExpression', () => {
+    this.SUBRULE(this.notExpression);
+    this.MANY(() => {
+      this.CONSUME(And);
+      this.SUBRULE2(this.notExpression);
+    });
+  });
+
+  private readonly notExpression = this.RULE('notExpression', () => {
+    this.OPTION(() => {
+      this.CONSUME(Not);
+    });
+    this.SUBRULE(this.comparisonExpression);
+  });
+
+  private readonly comparisonExpression = this.RULE(
+    'comparisonExpression',
+    () => {
+      this.SUBRULE(this.additiveExpression);
+      this.OPTION(() => {
+        this.OR([
+          {
+            // `<operand> <operator> <operand>`
+            ALT: () => {
+              this.OR2([
+                { ALT: () => this.CONSUME(EqEq) },
+                { ALT: () => this.CONSUME(Eq) },
+                { ALT: () => this.CONSUME(NotEq) },
+                { ALT: () => this.CONSUME(LtEq) },
+                { ALT: () => this.CONSUME(GtEq) },
+                { ALT: () => this.CONSUME(Lt) },
+                { ALT: () => this.CONSUME(Gt) },
+                { ALT: () => this.CONSUME(Like) },
+              ]);
+              this.SUBRULE2(this.additiveExpression);
+            },
+          },
+          {
+            // `<operand> [not] in ( <values> )`
+            ALT: () => {
+              this.OPTION2(() => {
+                this.CONSUME(Not);
+              });
+              this.CONSUME(In);
+              this.CONSUME(LParen);
+              this.SUBRULE(this.expressionList);
+              this.CONSUME(RParen);
+            },
+          },
+          {
+            // `<operand> is [not] null | initial`
+            ALT: () => {
+              this.CONSUME(Is);
+              this.OPTION3(() => {
+                this.CONSUME2(Not);
+              });
+              this.OR3([
+                { ALT: () => this.CONSUME(Null) },
+                { ALT: () => this.CONSUME(Initial) },
+              ]);
+            },
+          },
+        ]);
+      });
+    },
+  );
+
+  private readonly additiveExpression = this.RULE('additiveExpression', () => {
+    this.SUBRULE(this.multiplicativeExpression);
     this.MANY(() => {
       this.OR([
-        { ALT: () => this.CONSUME(And) },
-        { ALT: () => this.CONSUME(Or) },
+        { ALT: () => this.CONSUME(Plus) },
+        { ALT: () => this.CONSUME(Minus) },
       ]);
-      this.SUBRULE2(this.comparison);
+      this.SUBRULE2(this.multiplicativeExpression);
     });
   });
 
-  private readonly comparison = this.RULE('comparison', () => {
-    this.SUBRULE(this.operand);
-    this.OPTION(() => {
-      this.OR([
-        {
-          ALT: () => {
-            this.OR2([
-              { ALT: () => this.CONSUME(EqEq) },
-              { ALT: () => this.CONSUME(Eq) },
-              { ALT: () => this.CONSUME(NotEq) },
-              { ALT: () => this.CONSUME(LtEq) },
-              { ALT: () => this.CONSUME(GtEq) },
-              { ALT: () => this.CONSUME(Lt) },
-              { ALT: () => this.CONSUME(Gt) },
-            ]);
-            this.SUBRULE2(this.operand);
-          },
-        },
-        {
-          // `is null` / `is not null` / `is initial` / `is not initial`
-          GATE: () => this.isIsPredicate(),
-          ALT: () => {
-            this.CONSUME(Identifier); // `is`
-            this.OPTION2(() => this.CONSUME(Not));
-            this.OR3([
-              { ALT: () => this.CONSUME(Null) },
-              { ALT: () => this.CONSUME2(Identifier) }, // `initial`
-            ]);
-          },
-        },
-      ]);
-    });
-  });
+  private readonly multiplicativeExpression = this.RULE(
+    'multiplicativeExpression',
+    () => {
+      this.SUBRULE(this.primaryExpression);
+      this.MANY(() => {
+        this.OR([
+          { ALT: () => this.CONSUME(Star) },
+          { ALT: () => this.CONSUME(Slash) },
+        ]);
+        this.SUBRULE2(this.primaryExpression);
+      });
+    },
+  );
 
-  /** Cheap lookahead: `is` — the `is null` / `is initial` predicate. */
-  private isIsPredicate(): boolean {
-    const first = this.LA(1);
-    if (!first) return false;
-    return (
-      first.tokenType?.name === 'Identifier' &&
-      first.image.toLowerCase() === 'is'
-    );
-  }
-
-  private readonly operand = this.RULE('operand', () => {
+  private readonly primaryExpression = this.RULE('primaryExpression', () => {
     this.OR([
-      { ALT: () => this.SUBRULE(this.literal) },
-      { ALT: () => this.SUBRULE(this.systemVariable) },
       { ALT: () => this.SUBRULE(this.parenthesizedExpression) },
-      { ALT: () => this.SUBRULE(this.pathOperand) },
+      { ALT: () => this.SUBRULE(this.operand) },
+      { ALT: () => this.SUBRULE(this.systemVariable) },
+      { ALT: () => this.SUBRULE(this.literal) },
     ]);
   });
+
+  /** `( <expression> )` — a parenthesized sub-condition. */
+  private readonly parenthesizedExpression = this.RULE(
+    'parenthesizedExpression',
+    () => {
+      this.CONSUME(LParen);
+      this.SUBRULE(this.orExpression);
+      this.CONSUME(RParen);
+    },
+  );
 
   /**
    * A path operand: `<name>[.<name>...]` optionally followed by an argument
@@ -1011,30 +1095,44 @@ export class CdsParser extends CstParser {
    * The arguments are parsed as expressions so that nested structures
    * (including the commas inside them) are not truncated.
    */
-  private readonly pathOperand = this.RULE('pathOperand', () => {
+  private readonly operand = this.RULE('operand', () => {
     this.SUBRULE(this.qualifiedName);
     this.OPTION(() => {
       this.CONSUME(LParen);
       this.OPTION2(() => {
-        this.SUBRULE(this.expression);
-        this.MANY(() => {
-          this.CONSUME(Comma);
-          this.SUBRULE2(this.expression);
-        });
+        this.SUBRULE(this.expressionList);
       });
       this.CONSUME(RParen);
     });
   });
 
-  /** `( <expression> )` — a parenthesized sub-condition. */
-  private readonly parenthesizedExpression = this.RULE(
-    'parenthesizedExpression',
-    () => {
+  /**
+   * A path operand of a **projection** element: `<name>[.<name>...]`
+   * optionally followed by an argument list.
+   *
+   * It has the same shape as the expression `operand`, but it is a separate
+   * rule: a projection element is captured as source-like text, while an
+   * operand of a condition becomes a structured `Expr`.
+   */
+  private readonly projectionOperand = this.RULE('projectionOperand', () => {
+    this.SUBRULE(this.qualifiedName);
+    this.OPTION(() => {
       this.CONSUME(LParen);
-      this.SUBRULE(this.expression);
+      this.OPTION2(() => {
+        this.SUBRULE(this.expressionList);
+      });
       this.CONSUME(RParen);
-    },
-  );
+    });
+  });
+
+  /** `<expression> , <expression> , …` — a value list. */
+  private readonly expressionList = this.RULE('expressionList', () => {
+    this.SUBRULE(this.orExpression);
+    this.MANY(() => {
+      this.CONSUME(Comma);
+      this.SUBRULE2(this.orExpression);
+    });
+  });
 
   /** `$session.client`, `$parameters.P_X`, `$projection.Field`. */
   private readonly systemVariable = this.RULE('systemVariable', () => {

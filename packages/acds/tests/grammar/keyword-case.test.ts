@@ -1,6 +1,6 @@
 /// <reference types="vitest/globals" />
 // Vitest globals are enabled for this package (see vitest.config.ts).
-import { parse } from '../../src/index';
+import { parse, serializeExpr } from '../../src/index';
 import type { JoinType, ViewEntityDefinition } from '../../src/ast';
 
 function getView(src: string): ViewEntityDefinition {
@@ -59,7 +59,7 @@ describe('keyword case handling', () => {
       }
     `);
 
-    expect(v.joins[0].on?.tokens).toEqual(['A', '.', 'k', '=', 'B', '.', 'k']);
+    expect(serializeExpr(v.joins[0].on!)).toBe('A.k = B.k');
   });
 
   it('parses uppercase AND / OR in a condition', () => {
@@ -71,7 +71,7 @@ describe('keyword case handling', () => {
       }
     `);
 
-    expect(v.joins[0].on?.tokens).toContain('AND');
+    expect(serializeExpr(v.joins[0].on!)).toBe('A.k = B.k and A.x = B.x');
 
     const withOr = getView(`
       define view entity V as select from A
@@ -80,7 +80,7 @@ describe('keyword case handling', () => {
         A.k
       }
     `);
-    expect(withOr.joins[0].on?.tokens).toContain('OR');
+    expect(serializeExpr(withOr.joins[0].on!)).toBe('A.k = B.k or A.x = B.x');
   });
 
   it('parses a mixed-case join after three earlier joins', () => {

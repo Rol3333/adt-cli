@@ -79,6 +79,39 @@ Join syntax:
 Keywords are matched case-insensitively — `DEFINE VIEW ENTITY` and
 `define view entity` both parse, and identifiers keep their original spelling.
 
+## Expressions
+
+The `on` and `where` conditions are parsed into a structured `Expr` tree
+instead of an opaque token list:
+
+- `FieldRefExpr` — a data-source path (`_Item.Field`),
+- `ProjectionRefExpr` / `ParamRefExpr` / `SessionVarExpr` — the system
+  variables `$projection.X`, `$parameters.P_X` and `$session.client`,
+- `LiteralExpr`, `BinaryExpr`, `NotExpr`, `IsNullExpr`, `IsInitialExpr`,
+  `InExpr`, `CallExpr` and `CastExpr`.
+
+The grammar follows the SQL precedence (`AND` binds tighter than `OR`,
+comparisons bind tighter than `NOT`) and supports comparisons, `NOT`,
+`is null` / `is initial`, `in (…)`, `like` and arithmetic.
+
+`serializeExpr(expr)` renders a condition in its canonical text form — it is
+the single test oracle for conditions:
+
+```ts
+import { parse, serializeExpr } from '@abapify/acds';
+
+const { ast } = parse(`
+  define view entity V as select from I_Item as _Item
+    left outer join ZI_Other as _Other on _Item.key = _Other.key
+  {
+    key _Item.key
+  }
+`);
+
+const view = ast.definitions[0] as ViewEntityDefinition;
+serializeExpr(view.joins[0].on!); // '_Item.key = _Other.key'
+```
+
 ## Usage
 
 ```ts

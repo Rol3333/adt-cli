@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parse } from '../../src/index';
+import { parse, serializeExpr } from '../../src/index';
 import type {
   ViewEntityDefinition,
   AssociationDeclaration,
@@ -86,7 +86,7 @@ describe('view entity — as select from', () => {
     expect(r.errors).toHaveLength(0);
     const v = r.ast.definitions[0] as ViewEntityDefinition;
     expect(v.where).toBeDefined();
-    expect(v.where?.source).toContain('=');
+    expect(serializeExpr(v.where!)).toBe("a = 'X'");
   });
 });
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { serializeExpr } from '../../src/index';
 import { parse } from '../../src/index';
 import type {
   AssociationDeclaration,
@@ -87,7 +88,7 @@ describe('associations', () => {
       }
     `);
     expect(a.on).toBeDefined();
-    expect(a.on?.source).toContain('=');
+    expect(serializeExpr(a.on!)).toContain('=');
   });
 
   it('carries annotations', () => {

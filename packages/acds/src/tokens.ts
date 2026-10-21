@@ -371,6 +371,37 @@ export const Outer = createToken({
   longer_alt: Identifier,
 });
 
+// ---- Expression keywords -------------------------------------------
+//
+// `is null` / `is not null`, `is initial` / `is not initial`, `in` and
+// `like`. The keywords are case-insensitive and keep `longer_alt: Identifier`
+// so that an identifier that starts with the keyword is still an identifier
+// (`Issue` stays `Issue`).
+
+export const Is = createToken({
+  name: 'Is',
+  pattern: keyword('is'),
+  longer_alt: Identifier,
+});
+
+export const Initial = createToken({
+  name: 'Initial',
+  pattern: keyword('initial'),
+  longer_alt: Identifier,
+});
+
+export const In = createToken({
+  name: 'In',
+  pattern: keyword('in'),
+  longer_alt: Identifier,
+});
+
+export const Like = createToken({
+  name: 'Like',
+  pattern: keyword('like'),
+  longer_alt: Identifier,
+});
+
 // Operators for simple expressions inside where-clauses / associations
 export const EqEq = createToken({ name: 'EqEq', pattern: /==/ });
 export const Eq = createToken({ name: 'Eq', pattern: /=/ });
@@ -480,6 +511,14 @@ export const allTokens = [
   Right,
   Cross,
   Full,
+  // NOTE: the order of the expression keywords matters — the lexer resolves
+  // the first matching token in list order:
+  //   - `Initial` must precede `In` ("in" is a prefix of "initial"),
+  //   - `Include` and `Inner` are listed before `In` for the same reason.
+  Is,
+  Initial,
+  In,
+  Like,
   // NOTE: `Outer` must precede `Or` ("or" is a prefix of "outer").
   Outer,
   And,

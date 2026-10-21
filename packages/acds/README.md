@@ -26,6 +26,7 @@ Parses `.acds` (ABAP CDS DDL) source code into a fully typed Abstract Syntax Tre
 - **Comments** — line (`//`, `--`) and block (`/* */`) comments are skipped
 - **Case-insensitive keywords** — `DEFINE VIEW ENTITY` and `define view entity` both parse; identifiers keep their original spelling
 - **FROM clause** — join chains, parameterized sources, FROM associations
+- **Structured expressions** — `on` / `where` conditions become a typed `Expr` tree with SQL precedence; `serializeExpr()` renders the canonical text
 - **View flavours** — `define view entity <name>` and the legacy `define view <name>`
 - **Projection elements** — paths, calls (`coalesce(a, b)`, `sum(x)`) and `cast(x as type [preserving type])`
 
@@ -190,7 +191,7 @@ interface ViewEntityDefinition {
   fromAssociations?: AssociationDeclaration[]; // associations of the FROM region
   parameters: ParameterDefinition[];
   members: ViewMember[];
-  where?: Expression;
+  where?: Expr; // the filter condition
 }
 
 interface DataSource {
@@ -210,8 +211,52 @@ interface JoinClause {
   kind: 'join';
   joinType: JoinType; // normalized spelling
   source: DataSource; // the joined source (with alias / parameters)
-  on?: Expression; // the ON condition (opaque)
+  on?: Expr; // the ON condition
 }
+```
+
+#### Expressions (`on` / `where` conditions)
+
+A condition is a structured expression tree — the AST is structural, not a
+source mirror. `serializeExpr()` renders it in the canonical text form.
+
+```typescript
+type Expr =
+  | FieldRefExpr // _Item.Field
+  | ProjectionRefExpr // $projection.Field
+  | ParamRefExpr // $parameters.P_X
+  | SessionVarExpr // $session.client
+  | LiteralExpr // 'X', 42, true
+  | BinaryExpr // =, !=, <, <=, >, >=, and, or, like, +, -, *, /
+  | NotExpr // not <operand>
+  | IsNullExpr // <operand> is [not] null
+  | IsInitialExpr // <operand> is [not] initial
+  | InExpr // <operand> [not] in (a, b)
+  | CallExpr // coalesce(a, b)
+  | CastExpr; // cast(x as type [preserving type])
+
+interface BinaryExpr {
+  kind: 'binary';
+  op: BinaryOp;
+  left: Expr;
+  right: Expr;
+}
+```
+
+```typescript
+import { parse, serializeExpr } from '@abapify/acds';
+
+const { ast } = parse(`
+  define view entity V as select from I_Item as _Item
+    left outer join ZI_Other as _Other on _Item.key = _Other.key
+  {
+    key _Item.key
+  }
+`);
+
+const view = ast.definitions[0] as ViewEntityDefinition;
+view.joins[0].on; // { kind: 'binary', op: 'eq', left: { kind: 'fieldRef', … }, … }
+serializeExpr(view.joins[0].on!); // '_Item.key = _Other.key'
 ```
 
 Supported join spellings (normalized to `JoinType`):
@@ -296,7 +341,7 @@ Source string
 - ✅ **Annotations**: full value grammar (strings, enums, booleans, numbers, arrays, objects, dotted keys)
 - ✅ **Tooling**: AST walker helpers, semantic validators (`SemanticDiagnostic`), grammar coverage metadata
 - ✅ **FROM clause**: join chains (`inner`, `left [outer]`, `right [outer]`, `full [outer]`, `cross`), parameterized sources, FROM associations
-- 🔜 **Expression grammar** (structured `on`/`where` trees — currently opaque `{ source, tokens }`)
+- ✅ **Expression grammar**: structured `on` / `where` trees (`Expr`) with SQL precedence and a canonical serializer
 - 🔜 **CASE**, arithmetic expressions, GROUP BY, UNION
 - 🔜 **`define aspect` (DRAS), `define hierarchy`, cache definitions (DTDC/DTSC), scalar functions (DSFD)**
 - 🔜 **BDEF / behavior definitions** (owned by epic E10)

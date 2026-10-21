@@ -13,6 +13,7 @@ import type {
   AnnotatedElement,
   AssociationDeclaration,
   AssociationKind,
+  BinaryOp,
   BuiltinTypeRef,
   Cardinality,
   CdsDefinition,
@@ -21,13 +22,14 @@ import type {
   DataSource,
   DataSourceKind,
   DataSourceParameter,
-  Expression,
   ExposeStatement,
+  Expr,
   FieldDefinition,
   GrantStatement,
   IncludeDirective,
   JoinClause,
   JoinType,
+  LiteralExpr,
   MetadataExtension,
   NamedTypeRef,
   ParameterDefinition,
@@ -50,6 +52,23 @@ const BaseCstVisitor = cdsParser.getBaseCstVisitorConstructor<
 >();
 
 type Ctx = Record<string, CstNode[] | IToken[] | undefined>;
+
+/**
+ * The default value of a parameter is an annotation value — the literal of
+ * the expression grammar is mapped back to it.
+ */
+function toAnnotationValue(expr: LiteralExpr): AnnotationValue {
+  switch (expr.literal) {
+    case 'string':
+      return { kind: 'string', value: String(expr.value ?? '') };
+    case 'number':
+      return { kind: 'number', value: Number(expr.value ?? 0) };
+    case 'boolean':
+      return { kind: 'boolean', value: Boolean(expr.value) };
+    default:
+      return { kind: 'string', value: 'null' };
+  }
+}
 
 function asNodes(v: CstNode[] | IToken[] | undefined): CstNode[] {
   return (v as CstNode[]) ?? [];
@@ -76,14 +95,6 @@ function collectTokenImages(node: CstNode | undefined): IToken[] {
   walk(node);
   out.sort((a, b) => (a.startOffset ?? 0) - (b.startOffset ?? 0));
   return out;
-}
-
-function toExpression(node: CstNode | undefined): Expression {
-  const toks = collectTokenImages(node);
-  return {
-    source: toks.map((t) => t.image).join(' '),
-    tokens: toks.map((t) => t.image),
-  };
 }
 
 /** All tokens of a rule context, in source order. */
@@ -118,6 +129,28 @@ function formatTokens(toks: IToken[]): string {
     out += tight ? img : ` ${img}`;
   }
   return out;
+}
+
+/** Tokens sorted by their position in the source. */
+function sortedTokens(tokens: IToken[]): IToken[] {
+  return [...tokens].sort(
+    (a, b) => (a.startOffset ?? 0) - (b.startOffset ?? 0),
+  );
+}
+
+/**
+ * The comparison operator of a `comparisonExpression` — `undefined` when the
+ * expression is not a comparison.
+ */
+function comparisonOperator(ctx: Ctx): BinaryOp | undefined {
+  if (asTokens(ctx.EqEq).length || asTokens(ctx.Eq).length) return 'eq';
+  if (asTokens(ctx.NotEq).length) return 'ne';
+  if (asTokens(ctx.LtEq).length) return 'le';
+  if (asTokens(ctx.GtEq).length) return 'ge';
+  if (asTokens(ctx.Lt).length) return 'lt';
+  if (asTokens(ctx.Gt).length) return 'gt';
+  if (asTokens(ctx.Like).length) return 'like';
+  return undefined;
 }
 
 /**
@@ -231,8 +264,8 @@ export class CdsVisitor extends BaseCstVisitor {
       ? (this.visit(asNodes(ctx.elementList)[0]) as ViewMember[])
       : [];
 
-    const where = ctx.expression
-      ? toExpression(asNodes(ctx.expression)[0])
+    const where = ctx.orExpression
+      ? (this.visit(asNodes(ctx.orExpression)[0]) as Expr | undefined)
       : undefined;
 
     return {
@@ -323,13 +356,13 @@ export class CdsVisitor extends BaseCstVisitor {
     const joinType = this.visit(asNodes(ctx.joinType)[0]) as JoinType;
     const joined = this.visit(asNodes(ctx.joinSource)[0]) as {
       source: DataSource;
-      on: Expression;
+      on?: Expr;
     };
     return {
       kind: 'join',
       joinType,
       source: joined.source,
-      on: joined.on,
+      ...(joined.on && { on: joined.on }),
     };
   }
 
@@ -343,10 +376,12 @@ export class CdsVisitor extends BaseCstVisitor {
     return 'inner';
   }
 
-  joinSource(ctx: Ctx): { source: DataSource; on: Expression } {
+  joinSource(ctx: Ctx): { source: DataSource; on?: Expr } {
     const source = this.visit(asNodes(ctx.dataSource)[0]) as DataSource;
-    const on = toExpression(asNodes(ctx.expression)[0]);
-    return { source, on };
+    const on = ctx.orExpression
+      ? (this.visit(asNodes(ctx.orExpression)[0]) as Expr | undefined)
+      : undefined;
+    return { source, ...(on && { on }) };
   }
 
   dataSourceParameters(ctx: Ctx): DataSourceParameter[] {
@@ -433,8 +468,11 @@ export class CdsVisitor extends BaseCstVisitor {
     const expression = ctx.castExpression
       ? (this.visit(asNodes(ctx.castExpression)[0]) as { expression: string })
           .expression
-      : (this.visit(asNodes(ctx.pathOperand)[0]) as { expression: string })
-          .expression;
+      : (
+          this.visit(asNodes(ctx.projectionOperand)[0]) as {
+            expression: string;
+          }
+        ).expression;
     const aliasNode = asNodes(ctx.cdsName)[0];
     const alias = aliasNode ? (this.visit(aliasNode) as string) : undefined;
     return { expression, ...(alias && { alias }) };
@@ -444,7 +482,8 @@ export class CdsVisitor extends BaseCstVisitor {
     return { expression: formatTokens(ctxTokens(ctx)) };
   }
 
-  pathOperand(ctx: Ctx): { expression: string } {
+  /** A projection element is captured as source-like text. */
+  projectionOperand(ctx: Ctx): { expression: string } {
     return { expression: formatTokens(ctxTokens(ctx)) };
   }
 
@@ -468,8 +507,8 @@ export class CdsVisitor extends BaseCstVisitor {
     const target = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
     const aliasNode = asNodes(ctx.cdsName)[0];
     const alias = aliasNode ? (this.visit(aliasNode) as string) : undefined;
-    const on = ctx.expression
-      ? toExpression(asNodes(ctx.expression)[0])
+    const on = ctx.orExpression
+      ? (this.visit(asNodes(ctx.orExpression)[0]) as Expr | undefined)
       : undefined;
 
     return {
@@ -528,7 +567,7 @@ export class CdsVisitor extends BaseCstVisitor {
     const name = this.visit(asNodes(ctx.cdsName)[0]) as string;
     const type = this.visit(asNodes(ctx.typeReference)[0]) as TypeRef;
     const defaultValue = ctx.literal
-      ? (this.visit(asNodes(ctx.literal)[0]) as AnnotationValue)
+      ? toAnnotationValue(this.visit(asNodes(ctx.literal)[0]) as LiteralExpr)
       : undefined;
     return {
       annotations,
@@ -599,8 +638,8 @@ export class CdsVisitor extends BaseCstVisitor {
 
   grantStatement(ctx: Ctx): GrantStatement {
     const entity = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
-    const where = ctx.expression
-      ? toExpression(asNodes(ctx.expression)[0])
+    const where = ctx.orExpression
+      ? (this.visit(asNodes(ctx.orExpression)[0]) as Expr | undefined)
       : undefined;
     return { privilege: 'select', entity, ...(where && { where }) };
   }
@@ -690,45 +729,187 @@ export class CdsVisitor extends BaseCstVisitor {
 
   // ---- Literals ---------------------------------------------
 
-  literal(ctx: Ctx): AnnotationValue {
+  literal(ctx: Ctx): LiteralExpr {
     if (ctx.StringLiteral) {
       const raw = asTokens(ctx.StringLiteral)[0].image;
-      return { kind: 'string', value: raw.slice(1, -1) };
+      return { kind: 'literal', literal: 'string', value: raw.slice(1, -1) };
+    }
+    if (ctx.NumberLiteral) {
+      return {
+        kind: 'literal',
+        literal: 'number',
+        value: Number.parseFloat(asTokens(ctx.NumberLiteral)[0].image),
+      };
     }
     if (ctx.EnumLiteral) {
-      const raw = asTokens(ctx.EnumLiteral)[0].image;
-      return { kind: 'enum', value: raw.slice(1) };
+      // An enum literal (`#TRANSPARENT`) is kept as its source text.
+      return {
+        kind: 'literal',
+        literal: 'string',
+        value: asTokens(ctx.EnumLiteral)[0].image,
+      };
     }
-    if (ctx.True) return { kind: 'boolean', value: true };
-    if (ctx.False) return { kind: 'boolean', value: false };
-    return {
-      kind: 'number',
-      value: Number.parseFloat(asTokens(ctx.NumberLiteral)[0].image),
-    };
+    if (ctx.True) return { kind: 'literal', literal: 'boolean', value: true };
+    return { kind: 'literal', literal: 'boolean', value: false };
   }
 
-  // ---- Expressions (opaque) ---------------------------------
+  // ---- Expressions ------------------------------------------
+  //
+  // The expression rules are visited defensively: a broken condition must
+  // not throw — the parser reports the error and the AST keeps the parts
+  // that could be read.
 
-  expression(): unknown {
-    // Visitor never called directly — expressions are captured via
-    // `toExpression()` on the raw CstNode to keep them opaque.
-    return null;
+  orExpression(ctx: Ctx): Expr | undefined {
+    const parts = asNodes(ctx.andExpression);
+    let result = this.visit(parts[0]) as Expr | undefined;
+    for (const part of parts.slice(1)) {
+      const right = this.visit(part) as Expr | undefined;
+      if (!result || !right) return undefined;
+      result = { kind: 'binary', op: 'or', left: result, right };
+    }
+    return result;
   }
 
-  comparison(): unknown {
-    return null;
+  andExpression(ctx: Ctx): Expr | undefined {
+    const parts = asNodes(ctx.notExpression);
+    let result = this.visit(parts[0]) as Expr | undefined;
+    for (const part of parts.slice(1)) {
+      const right = this.visit(part) as Expr | undefined;
+      if (!result || !right) return undefined;
+      result = { kind: 'binary', op: 'and', left: result, right };
+    }
+    return result;
   }
 
-  operand(): unknown {
-    return null;
+  notExpression(ctx: Ctx): Expr | undefined {
+    const operand = this.visit(asNodes(ctx.comparisonExpression)[0]) as
+      Expr | undefined;
+    if (!operand) return undefined;
+    return asTokens(ctx.Not).length ? { kind: 'not', operand } : operand;
   }
 
-  parenthesizedExpression(): unknown {
-    return null;
+  comparisonExpression(ctx: Ctx): Expr | undefined {
+    const operands = asNodes(ctx.additiveExpression);
+    const left = this.visit(operands[0]) as Expr | undefined;
+    if (!left) return undefined;
+
+    // `<operand> <operator> <operand>`
+    const op = comparisonOperator(ctx);
+    if (op) {
+      const right = this.visit(operands[1]) as Expr | undefined;
+      return right ? { kind: 'binary', op, left, right } : undefined;
+    }
+
+    // `<operand> [not] in ( <values> )`
+    if (ctx.In) {
+      const values = ctx.expressionList
+        ? (this.visit(asNodes(ctx.expressionList)[0]) as Expr[])
+        : [];
+      return {
+        kind: 'in',
+        operand: left,
+        values,
+        ...(asTokens(ctx.Not).length && { negated: true }),
+      };
+    }
+
+    // `<operand> is [not] null | initial`
+    if (ctx.Is) {
+      const negated = asTokens(ctx.Not).length > 0;
+      if (ctx.Initial) {
+        return { kind: 'isInitial', operand: left, negated };
+      }
+      return { kind: 'isNull', operand: left, negated };
+    }
+
+    return left;
   }
 
-  systemVariable(): unknown {
-    return null;
+  additiveExpression(ctx: Ctx): Expr | undefined {
+    const parts = asNodes(ctx.multiplicativeExpression);
+    const operators = sortedTokens([
+      ...asTokens(ctx.Plus),
+      ...asTokens(ctx.Minus),
+    ]);
+    let result = this.visit(parts[0]) as Expr | undefined;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const right = this.visit(parts[i + 1]) as Expr | undefined;
+      if (!result || !right) return undefined;
+      const op: BinaryOp = operators[i]?.image === '-' ? 'sub' : 'add';
+      result = { kind: 'binary', op, left: result, right };
+    }
+    return result;
+  }
+
+  multiplicativeExpression(ctx: Ctx): Expr | undefined {
+    const parts = asNodes(ctx.primaryExpression);
+    const operators = sortedTokens([
+      ...asTokens(ctx.Star),
+      ...asTokens(ctx.Slash),
+    ]);
+    let result = this.visit(parts[0]) as Expr | undefined;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const right = this.visit(parts[i + 1]) as Expr | undefined;
+      if (!result || !right) return undefined;
+      const op: BinaryOp = operators[i]?.image === '/' ? 'div' : 'mul';
+      result = { kind: 'binary', op, left: result, right };
+    }
+    return result;
+  }
+
+  primaryExpression(ctx: Ctx): Expr | undefined {
+    if (ctx.parenthesizedExpression) {
+      return this.visit(asNodes(ctx.parenthesizedExpression)[0]) as
+        Expr | undefined;
+    }
+    if (ctx.operand) {
+      return this.visit(asNodes(ctx.operand)[0]) as Expr | undefined;
+    }
+    if (ctx.systemVariable) {
+      return this.visit(asNodes(ctx.systemVariable)[0]) as Expr | undefined;
+    }
+    if (ctx.literal) {
+      return this.visit(asNodes(ctx.literal)[0]) as Expr | undefined;
+    }
+    return undefined;
+  }
+
+  /** `( <expression> )` — the parentheses are grouping only. */
+  parenthesizedExpression(ctx: Ctx): Expr | undefined {
+    return this.visit(asNodes(ctx.orExpression)[0]) as Expr | undefined;
+  }
+
+  /** A path (`_Item.Field`) or a call (`coalesce(a, b)`). */
+  operand(ctx: Ctx): Expr | undefined {
+    const name = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
+    if (!name) return undefined;
+    if (ctx.LParen) {
+      const args = ctx.expressionList
+        ? (this.visit(asNodes(ctx.expressionList)[0]) as Expr[])
+        : [];
+      return { kind: 'call', name, args };
+    }
+    return { kind: 'fieldRef', path: name.split('.') };
+  }
+
+  expressionList(ctx: Ctx): Expr[] {
+    return asNodes(ctx.orExpression)
+      .map((node) => this.visit(node) as Expr | undefined)
+      .filter((expr): expr is Expr => expr !== undefined);
+  }
+
+  /** `$session.client`, `$parameters.P_X`, `$projection.Field`. */
+  systemVariable(ctx: Ctx): Expr | undefined {
+    const name = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
+    if (!name) return undefined;
+    const [root, ...rest] = name.split('.');
+    const path = rest.join('.');
+    if (root === 'projection') return { kind: 'projectionRef', name: path };
+    if (root === 'parameters') return { kind: 'paramRef', name: path };
+    if (root === 'session') return { kind: 'sessionVar', name: path };
+    // An unknown system variable keeps the `$` prefix in the first path
+    // segment, so that no information is lost.
+    return { kind: 'fieldRef', path: [`$${root}`, ...rest] };
   }
 
   parameterBinding(): unknown {

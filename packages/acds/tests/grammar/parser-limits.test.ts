@@ -1,6 +1,7 @@
 /// <reference types="vitest/globals" />
 // Vitest globals are enabled for this package (see vitest.config.ts).
-import { parse } from '../../src/index';
+import { parse, serializeExpr } from '../../src/index';
+import type { Expr } from '../../src/ast';
 
 function errorCount(src: string): number {
   return parse(src).errors.length;
@@ -20,38 +21,12 @@ describe('parser limits', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('rejects NOT in an ON predicate', () => {
-    // Known limitation — the expression grammar has no NOT support.
+  it('rejects BETWEEN in an ON predicate', () => {
+    // Known limitation — the expression grammar has no BETWEEN support.
     expect(
       errorCount(`
         define view entity V as select from A
-          join B on not A.k = B.k
-        {
-          A.ID
-        }
-      `),
-    ).toBeGreaterThan(0);
-  });
-
-  it('rejects LIKE in an ON predicate', () => {
-    // Known limitation — the expression grammar has no LIKE support.
-    expect(
-      errorCount(`
-        define view entity V as select from A
-          join B on A.k like 'X%'
-        {
-          A.ID
-        }
-      `),
-    ).toBeGreaterThan(0);
-  });
-
-  it('rejects an arithmetic operand in an ON predicate', () => {
-    // Known limitation — the expression grammar has no arithmetic support.
-    expect(
-      errorCount(`
-        define view entity V as select from A
-          join B on B.k + 1 = A.k
+          join B on A.k between 1 and 2
         {
           A.ID
         }
@@ -62,7 +37,7 @@ describe('parser limits', () => {
   it('does not silently truncate a rejected ON condition', () => {
     const r = parse(`
       define view entity V as select from A
-        join B on B.k + 1 = A.k
+        join B on A.k between 1 and 2
       {
         A.ID
       }
@@ -70,11 +45,13 @@ describe('parser limits', () => {
 
     expect(r.errors.length).toBeGreaterThan(0);
 
-    // The condition must not be reported as a complete, valid predicate.
+    // The condition must not be reported as a complete, valid predicate: only
+    // the operand could be read, the rejected part is not part of the AST.
     const view = r.ast.definitions[0] as {
-      joins?: Array<{ on?: { source: string } }>;
+      joins?: Array<{ on?: Expr }>;
     };
-    const on = view.joins?.[0]?.on?.source ?? '';
-    expect(on).not.toContain('+ 1');
+    const on = view.joins?.[0]?.on;
+    expect(on?.kind).toBe('fieldRef');
+    expect(serializeExpr(on!)).toBe('A.k');
   });
 });

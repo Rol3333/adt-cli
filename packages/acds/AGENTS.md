@@ -22,6 +22,7 @@
 | `annotations`  | `@Key`, `@Key:value`, arrays, nested objects, dotted property keys                                                                                                                     |
 | `associations` | `association`, `composition`, cardinality `[L..U]` / `[*]` / `[N]`, `of many/one`, `redirected to`, `on <expr>`, `as <alias>`                                                          |
 | `joins`        | `JOIN` / `INNER JOIN` / `LEFT [OUTER] JOIN` / `RIGHT [OUTER] JOIN` / `FULL [OUTER] JOIN` / `CROSS JOIN`, chained joins, parameterized sources, `ON <expr>`                             |
+| `expressions`  | comparisons, `AND` / `OR` (SQL precedence), `NOT`, `is null` / `is initial`, `in (…)`, `like`, arithmetic, calls, `$projection` / `$parameters` / `$session`                           |
 | `parameters`   | `with parameters p : <type> [default <literal>]`, annotated parameters                                                                                                                 |
 | `projections`  | key / virtual / redirected modifiers, typed fields (abstract/custom entities), `where` clauses                                                                                         |
 | `actions`      | _placeholder — owned by E10 (BDEF)_                                                                                                                                                    |
@@ -101,12 +102,25 @@ CDS sources commonly use keywords as identifiers (e.g. `@ObjectModel.association
 
 ### Expressions
 
-`on` and `where` clauses are captured as opaque `Expression { source, tokens }` structures — the parser does **not** produce an expression tree. Downstream consumers that need structural access should either:
+`on` and `where` clauses are parsed into a structured `Expr` tree (see `src/ast.ts`). The AST is **structural, not a source mirror**: whitespace and the original spelling are not preserved. The canonical text form is produced by `serializeExpr()` (`src/serialize.ts`) — it is the single test oracle for conditions.
 
-1. Parse the token stream themselves; or
-2. Wait for the expression grammar to be expanded (tracked as open question in the epic).
+The grammar mirrors the SQL precedence:
 
-The condition grammar accepts comparisons, `AND` / `OR` chains, parenthesized sub-conditions, call arguments (`coalesce(a, b)`), `is null` / `is not initial` predicates and system variables (`$session.client`, `$parameters.P_X`, `$projection.Field`). The capture is complete — it is **not** truncated at boolean operators, commas or parentheses.
+```text
+orExpression            andExpression ( OR andExpression )*
+andExpression           notExpression ( AND notExpression )*
+notExpression           [ NOT ] comparisonExpression
+comparisonExpression    additiveExpression [ <op> additiveExpression
+                                       | [NOT] IN ( <values> )
+                                       | IS [NOT] ( NULL | INITIAL ) ]
+additiveExpression      multiplicativeExpression ( ( + | - ) … )*
+multiplicativeExpression primaryExpression ( ( * | / ) … )*
+primaryExpression       ( <expression> ) | <path> | <call> | <system variable> | <literal>
+```
+
+Supported: comparisons (`=`, `==`, `!=`, `<>`, `<`, `<=`, `>`, `>=`), `AND` / `OR` with SQL precedence, `NOT`, parenthesized sub-conditions, `is null` / `is not null`, `is initial` / `is not initial`, `in (…)` / `not in (…)`, `like`, arithmetic (`+`, `-`, `*`, `/`), function calls and the system variables `$projection.X`, `$parameters.P_X`, `$session.client`.
+
+Not supported (yet): `BETWEEN`, `CASE … END`, unary minus and `cast(…)` inside a condition (a cast is supported in projection elements).
 
 ### Projection elements
 
