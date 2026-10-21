@@ -334,8 +334,10 @@ export class CdsVisitor extends BaseCstVisitor {
   }
 
   joinType(ctx: Ctx): JoinType {
-    // `JOIN` / `INNER JOIN` are normalized to `inner`.
-    if (asTokens(ctx.Cross).length) return 'cross';
+    // The spellings are normalized: `JOIN` / `INNER JOIN` → inner,
+    // `LEFT [OUTER] JOIN` → leftOuter, `RIGHT [OUTER] JOIN` → rightOuter,
+    // `FULL [OUTER] JOIN` → fullOuter.
+    if (asTokens(ctx.Full).length) return 'fullOuter';
     if (asTokens(ctx.Left).length) return 'leftOuter';
     if (asTokens(ctx.Right).length) return 'rightOuter';
     return 'inner';

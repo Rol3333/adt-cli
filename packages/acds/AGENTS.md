@@ -21,7 +21,7 @@
 | `dcl`          | `define role … { grant select on <entity> [where …] }`                                                                                                                                 |
 | `annotations`  | `@Key`, `@Key:value`, arrays, nested objects, dotted property keys                                                                                                                     |
 | `associations` | `association`, `composition`, cardinality `[L..U]` / `[*]` / `[N]`, `of many/one`, `redirected to`, `on <expr>`, `as <alias>`                                                          |
-| `joins`        | `JOIN` / `INNER JOIN` / `LEFT [OUTER] JOIN` / `RIGHT [OUTER] JOIN` / `CROSS JOIN`, chained joins, parameterized sources, `ON <expr>`                                                   |
+| `joins`        | `JOIN` / `INNER JOIN` / `LEFT [OUTER] JOIN` / `RIGHT [OUTER] JOIN` / `FULL [OUTER] JOIN` / `CROSS JOIN`, chained joins, parameterized sources, `ON <expr>`                             |
 | `parameters`   | `with parameters p : <type> [default <literal>]`, annotated parameters                                                                                                                 |
 | `projections`  | key / virtual / redirected modifiers, typed fields (abstract/custom entities), `where` clauses                                                                                         |
 | `actions`      | _placeholder — owned by E10 (BDEF)_                                                                                                                                                    |
@@ -91,7 +91,7 @@ Keyword patterns are **case-insensitive** (built by the shared `keyword()` helpe
 
 CDS sources commonly use keywords as identifiers (e.g. `@ObjectModel.association.type`). The `cdsName` rule in the parser accepts every keyword that can legally appear as a name. When adding a new keyword, **append it to the `cdsName` rule** if it might be used as an identifier anywhere.
 
-**Exception — the join keywords** (`join`, `inner`, `left`, `right`, `outer`, `cross`) **are** part of `cdsName` (they are reserved words, but still valid identifiers in name positions such as `A.left` or `as inner`). To keep them out of the _implicit_ (bare) source alias, the parser keeps a single exclusion set (`CdsParser.FROM_REGION_STARTERS`) and derives the `bareAliasName` rule from `CdsParser.NAME_TOKENS` minus that set. An explicit `as <alias>` stays unrestricted.
+**Exception — the join keywords** (`join`, `inner`, `left`, `right`, `outer`, `cross`, `full`) **are** part of `cdsName` (they are reserved words, but still valid identifiers in name positions such as `A.left` or `as inner`). To keep them out of the _implicit_ (bare) source alias, the parser keeps a single exclusion set (`CdsParser.FROM_REGION_STARTERS`) and derives the `bareAliasName` rule from `CdsParser.NAME_TOKENS` minus that set. An explicit `as <alias>` stays unrestricted.
 
 ### Parser Rules
 
@@ -140,16 +140,24 @@ as select from I_Item as _Item
 
 ### Join syntax rules
 
-- the `ON` condition is **required** for `[INNER] JOIN`, `LEFT OUTER JOIN` and
-  `RIGHT OUTER JOIN`, and **not allowed** for `CROSS JOIN` — enforced in the
-  grammar (`joinSource` vs. the cross-join alternative),
-- a **view entity** requires `LEFT OUTER JOIN` / `RIGHT OUTER JOIN`; the legacy
-  `define view` also accepts `LEFT JOIN` / `RIGHT JOIN` (compatibility — the
-  legacy rule is _unverified_, see `src/lib/grammar/joins.ts`),
-- `FULL OUTER JOIN` is not part of the ABAP CDS DDL join syntax,
+The accepted join syntax is the same for every view flavour — a CDS view entity
+(`define view entity`) and a classic SQL view (`define view`) accept exactly
+the same spellings. The parser keeps **no state** about the view flavour.
+
+- the `ON` condition is **required** for `[INNER] JOIN`, `LEFT [OUTER] JOIN`,
+  `RIGHT [OUTER] JOIN` and `FULL [OUTER] JOIN`, and **not allowed** for
+  `CROSS JOIN` — enforced in the grammar (`joinSource` vs. the cross-join
+  alternative),
+- the `OUTER` keyword is **optional** for the outer join types: `LEFT JOIN`
+  and `LEFT OUTER JOIN` are both accepted and both normalized to `leftOuter`,
+- `FULL [OUTER] JOIN` (the SQL-standard full outer join) is supported and
+  normalized to `fullOuter` — it is not part of the ABAP CDS DDL join syntax,
+  but it is needed to read HANA CDS / CAP CDS sources, which use the standard
+  SQL join syntax,
 - the _bare_ (implicit) source alias may not be a FROM-region starter
-  (`association`, `composition`, `join`, `inner`, `left`, `right`, `cross`) — see
-  `CdsParser.FROM_REGION_STARTERS`. An explicit `as <alias>` is unrestricted.
+  (`association`, `composition`, `join`, `inner`, `left`, `right`, `cross`,
+  `full`) — see `CdsParser.FROM_REGION_STARTERS`. An explicit `as <alias>` is
+  unrestricted.
 
 ## Consumers
 
@@ -172,7 +180,7 @@ Tests live in:
 - `tests/walker.test.ts` — AST traversal helpers
 - `tests/validate.test.ts` — semantic validators
 
-**≥ 72 tests, 12 real-world fixtures** (from `git_modules/abap-file-formats` and hand-crafted).
+**168 tests, 14 real-world fixtures** (from `git_modules/abap-file-formats` and hand-crafted).
 
 ## Dependencies
 

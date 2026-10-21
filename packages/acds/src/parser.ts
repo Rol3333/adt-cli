@@ -71,6 +71,7 @@ import {
   Left,
   Right,
   Cross,
+  Full,
   Outer,
   And,
   Or,
@@ -90,21 +91,6 @@ import {
 } from './tokens';
 
 export class CdsParser extends CstParser {
-  /**
-   * `true` while a CDS **view entity** (`define view entity <name>`) is
-   * parsed, `false` for the legacy `define view <name>` (classic SQL view).
-   *
-   * The two flavours differ in the accepted join spelling:
-   *
-   * - view entities: the documented syntax is `[INNER] JOIN`, `LEFT OUTER
-   *   JOIN`, `RIGHT OUTER JOIN`, `CROSS JOIN` — `LEFT JOIN` / `RIGHT JOIN`
-   *   without `OUTER` are rejected;
-   * - legacy views: `LEFT JOIN` / `RIGHT JOIN` are accepted for
-   *   compatibility (the legacy rule could not be verified against the ABAP
-   *   keyword documentation — see `src/lib/grammar/joins.ts`).
-   */
-  private isViewEntity = false;
-
   /**
    * All token types that may be used as a CDS name.
    *
@@ -148,6 +134,7 @@ export class CdsParser extends CstParser {
     Right,
     Outer,
     Cross,
+    Full,
   ];
 
   /**
@@ -171,6 +158,7 @@ export class CdsParser extends CstParser {
       Left,
       Right,
       Cross,
+      Full,
     ]);
 
   constructor() {
@@ -258,11 +246,10 @@ export class CdsParser extends CstParser {
     () => {
       this.CONSUME(View);
       // `define view entity <name>` (CDS view entity) and the legacy
-      // `define view <name>` (classic SQL view) share the same body.
-      this.isViewEntity = false;
+      // `define view <name>` (classic SQL view) share the same body — the
+      // parser does not restrict the syntax by the view flavour.
       this.OPTION(() => {
         this.CONSUME(Entity);
-        this.isViewEntity = true;
       });
       this.SUBRULE(this.cdsName);
       this.OPTION2(() => {
@@ -412,12 +399,14 @@ export class CdsParser extends CstParser {
   // Joins
   //
   //   [INNER] JOIN      <source> ON <expr>   -- ON is mandatory
-  //   LEFT OUTER JOIN   <source> ON <expr>   -- ON is mandatory
-  //   RIGHT OUTER JOIN  <source> ON <expr>   -- ON is mandatory
+  //   LEFT [OUTER] JOIN <source> ON <expr>   -- ON is mandatory
+  //   RIGHT [OUTER] JOIN <source> ON <expr>  -- ON is mandatory
+  //   FULL [OUTER] JOIN <source> ON <expr>   -- ON is mandatory
   //   CROSS JOIN        <source>             -- ON is not allowed
   //
-  // `LEFT JOIN` / `RIGHT JOIN` (without `OUTER`) are only accepted in the
-  // legacy `define view` syntax — see `isViewEntity`.
+  // The `OUTER` keyword is optional for the outer join types, and the syntax
+  // does not depend on the view flavour — a view entity and a legacy
+  // `define view` accept the same join spellings.
   // ============================================================
 
   private readonly joinClause = this.RULE('joinClause', () => {
@@ -444,33 +433,34 @@ export class CdsParser extends CstParser {
   /**
    * The join type of a join clause:
    *
-   *   JOIN | INNER JOIN | LEFT OUTER JOIN | RIGHT OUTER JOIN
-   *   LEFT JOIN | RIGHT JOIN      -- legacy `define view` only
+   *   JOIN | INNER JOIN
+   *   LEFT JOIN | LEFT OUTER JOIN
+   *   RIGHT JOIN | RIGHT OUTER JOIN
+   *   FULL JOIN | FULL OUTER JOIN
+   *
+   * The alternatives are distinguished by the first two tokens, so the rule
+   * stays LL(2) decidable.
    */
   private readonly joinType = this.RULE('joinType', () => {
     // NOTE: Chevrotain requires unique occurrence indices per rule, hence the
     // numbered CONSUME variants inside the alternatives.
     this.OR([
       {
-        // legacy view only: `LEFT JOIN`
-        GATE: () => this.isBareOuterJoin(Left),
         ALT: () => {
           this.CONSUME(Left);
           this.CONSUME(Join);
         },
       },
       {
-        // legacy view only: `RIGHT JOIN`
-        GATE: () => this.isBareOuterJoin(Right),
         ALT: () => {
-          this.CONSUME(Right);
+          this.CONSUME2(Left);
+          this.CONSUME(Outer);
           this.CONSUME2(Join);
         },
       },
       {
         ALT: () => {
-          this.CONSUME2(Left);
-          this.CONSUME(Outer);
+          this.CONSUME(Right);
           this.CONSUME3(Join);
         },
       },
@@ -483,13 +473,26 @@ export class CdsParser extends CstParser {
       },
       {
         ALT: () => {
-          this.CONSUME(Inner);
+          this.CONSUME(Full);
           this.CONSUME5(Join);
         },
       },
       {
         ALT: () => {
+          this.CONSUME2(Full);
+          this.CONSUME3(Outer);
           this.CONSUME6(Join);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(Inner);
+          this.CONSUME7(Join);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME8(Join);
         },
       },
     ]);
@@ -501,19 +504,6 @@ export class CdsParser extends CstParser {
     this.CONSUME(On);
     this.SUBRULE(this.expression);
   });
-
-  /**
-   * Is the next clause the legacy `LEFT JOIN` / `RIGHT JOIN` spelling?
-   *
-   * Only the legacy `define view` syntax accepts it — for a view entity the
-   * documented spelling is `LEFT OUTER JOIN` / `RIGHT OUTER JOIN`.
-   */
-  private isBareOuterJoin(tokenType: TokenType): boolean {
-    if (this.isViewEntity) return false;
-    const first = this.LA(1);
-    const second = this.LA(2);
-    return first.tokenType === tokenType && second.tokenType === Join;
-  }
 
   // ============================================================
   // Element list: `{ [key] [virtual] <expr> [as <alias>] ; ... }`

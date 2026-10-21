@@ -56,11 +56,10 @@ describe('joins', () => {
     expect(v.joins.map((j) => j.joinType)).toEqual(['leftOuter', 'leftOuter']);
   });
 
-  it('normalizes LEFT JOIN in a legacy view to leftOuter', () => {
-    // `LEFT JOIN` without `OUTER` is only accepted in the legacy
-    // `define view` syntax — a view entity requires `LEFT OUTER JOIN`.
+  it('normalizes LEFT JOIN to leftOuter', () => {
+    // The `OUTER` keyword is optional for the outer join types.
     const v = getView(`
-      define view V as select from A
+      define view entity V as select from A
         left join B on A.k = B.k
         left outer join C on B.k = C.k
       {
@@ -87,11 +86,10 @@ describe('joins', () => {
     ]);
   });
 
-  it('normalizes RIGHT JOIN in a legacy view to rightOuter', () => {
-    // `RIGHT JOIN` without `OUTER` is only accepted in the legacy
-    // `define view` syntax — a view entity requires `RIGHT OUTER JOIN`.
+  it('normalizes RIGHT JOIN to rightOuter', () => {
+    // The `OUTER` keyword is optional for the outer join types.
     const v = getView(`
-      define view V as select from A
+      define view entity V as select from A
         right join B on A.k = B.k
         right outer join C on B.k = C.k
       {
@@ -103,6 +101,19 @@ describe('joins', () => {
       'rightOuter',
       'rightOuter',
     ]);
+  });
+
+  it('normalizes FULL OUTER JOIN and FULL JOIN to fullOuter', () => {
+    const v = getView(`
+      define view entity V as select from A
+        full outer join B on A.k = B.k
+        full join C on B.k = C.k
+      {
+        key A.k
+      }
+    `);
+
+    expect(v.joins.map((j) => j.joinType)).toEqual(['fullOuter', 'fullOuter']);
   });
 
   it('normalizes CROSS JOIN to cross', () => {

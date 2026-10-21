@@ -131,45 +131,69 @@ describe('join syntax', () => {
     expect(v.joins?.[0]?.on).toBeUndefined();
   });
 
-  it('rejects FULL OUTER JOIN', () => {
-    // `FULL OUTER JOIN` is not part of the ABAP CDS DDL join syntax.
+  it('accepts FULL OUTER JOIN with an ON condition', () => {
+    // The SQL-standard outer join — supported so that HANA CDS / CAP CDS
+    // sources can be read with the same grammar.
     expect(
-      errorCount(`
+      joinTypeOf(`
         define view entity V as select from A
           full outer join B on A.ID = B.ID
         {
           A.ID
         }
       `),
+    ).toBe('fullOuter');
+  });
+
+  it('accepts FULL JOIN with an ON condition', () => {
+    expect(
+      joinTypeOf(`
+        define view entity V as select from A
+          full join B on A.ID = B.ID
+        {
+          A.ID
+        }
+      `),
+    ).toBe('fullOuter');
+  });
+
+  it('rejects FULL OUTER JOIN without an ON condition', () => {
+    expect(
+      errorCount(`
+        define view entity V as select from A
+          full outer join B
+        {
+          A.ID
+        }
+      `),
     ).toBeGreaterThan(0);
   });
 
-  it('rejects LEFT JOIN without OUTER in a view entity', () => {
-    // The documented view-entity syntax is `LEFT OUTER JOIN`.
+  it('accepts LEFT JOIN without OUTER in a view entity', () => {
     expect(
-      errorCount(`
+      joinTypeOf(`
         define view entity V as select from A
           left join B on A.ID = B.ID
         {
           A.ID
         }
       `),
-    ).toBeGreaterThan(0);
+    ).toBe('leftOuter');
   });
 
-  it('rejects RIGHT JOIN without OUTER in a view entity', () => {
+  it('accepts RIGHT JOIN without OUTER in a view entity', () => {
     expect(
-      errorCount(`
+      joinTypeOf(`
         define view entity V as select from A
           right join B on A.ID = B.ID
         {
           A.ID
         }
       `),
-    ).toBeGreaterThan(0);
+    ).toBe('rightOuter');
   });
 
-  it('accepts LEFT JOIN in a legacy view (compatibility)', () => {
+  it('accepts LEFT JOIN in a legacy view', () => {
     expect(
       joinTypeOf(`
         define view V as select from A
@@ -181,7 +205,7 @@ describe('join syntax', () => {
     ).toBe('leftOuter');
   });
 
-  it('accepts RIGHT JOIN in a legacy view (compatibility)', () => {
+  it('accepts RIGHT JOIN in a legacy view', () => {
     expect(
       joinTypeOf(`
         define view V as select from A
@@ -191,6 +215,18 @@ describe('join syntax', () => {
         }
       `),
     ).toBe('rightOuter');
+  });
+
+  it('accepts FULL OUTER JOIN in a legacy view', () => {
+    expect(
+      joinTypeOf(`
+        define view V as select from A
+          full outer join B on A.ID = B.ID
+        {
+          A.ID
+        }
+      `),
+    ).toBe('fullOuter');
   });
 
   it('keeps parsing a parameterized source with its ON condition', () => {

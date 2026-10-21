@@ -130,12 +130,13 @@ describe('FROM region — alias and keyword handling', () => {
       {
         A.left,
         A.right,
-        A.join
+        A.join,
+        A.full
       }
     `);
 
     const expressions = v.members.map((m) => (m as ViewElement).expression);
-    expect(expressions).toEqual(['A.left', 'A.right', 'A.join']);
+    expect(expressions).toEqual(['A.left', 'A.right', 'A.join', 'A.full']);
   });
 
   it('parses explicit aliases that use a join keyword', () => {
@@ -149,7 +150,7 @@ describe('FROM region — alias and keyword handling', () => {
     expect(v.source.alias).toBe('left');
   });
 
-  it('parses explicit aliases that use inner or cross', () => {
+  it('parses explicit aliases that use inner, cross or full', () => {
     const inner = getView(`
       define view entity V as select from A as inner
       {
@@ -165,6 +166,14 @@ describe('FROM region — alias and keyword handling', () => {
       }
     `);
     expect(cross.source.alias).toBe('cross');
+
+    const full = getView(`
+      define view entity V as select from A as full
+      {
+        full.ID
+      }
+    `);
+    expect(full.source.alias).toBe('full');
   });
 
   it('parses an ON condition with a keyword-like field name', () => {
@@ -247,5 +256,21 @@ describe('FROM region — alias and keyword handling', () => {
     expect(errors).toBe(0);
     expect(view.source.alias).toBeUndefined();
     expect(view.joins).toHaveLength(1);
+  });
+
+  it('does not use `full` as a bare alias', () => {
+    // `full` starts a `FULL [OUTER] JOIN` — it must not be read as an alias.
+    const { view, errors } = getViewWithErrors(`
+      define view entity V as select from A
+        full outer join B on A.ID = B.ID
+      {
+        A.ID
+      }
+    `);
+
+    expect(errors).toBe(0);
+    expect(view.source.alias).toBeUndefined();
+    expect(view.joins).toHaveLength(1);
+    expect(view.joins[0].joinType).toBe('fullOuter');
   });
 });

@@ -1,33 +1,34 @@
 /**
  * Join and parameterized data source grammar coverage.
  *
- *   [INNER] JOIN      <source> ON <expression>   -- ON is mandatory
- *   LEFT OUTER JOIN   <source> ON <expression>   -- ON is mandatory
- *   RIGHT OUTER JOIN  <source> ON <expression>   -- ON is mandatory
- *   CROSS JOIN        <source>                    -- ON is not allowed
+ *   [INNER] JOIN       <source> ON <expression>   -- ON is mandatory
+ *   LEFT [OUTER] JOIN  <source> ON <expression>   -- ON is mandatory
+ *   RIGHT [OUTER] JOIN <source> ON <expression>   -- ON is mandatory
+ *   FULL [OUTER] JOIN  <source> ON <expression>   -- ON is mandatory
+ *   CROSS JOIN         <source>                    -- ON is not allowed
  *
  *   <source> := <name> [ ( <param> : <value> , ... ) ] [ AS <alias> ]
  *
  * The different spellings are normalized into a single `JoinType`:
  *
  *   JOIN / INNER JOIN        → inner
- *   LEFT OUTER JOIN          → leftOuter
- *   RIGHT OUTER JOIN         → rightOuter
+ *   LEFT [OUTER] JOIN        → leftOuter
+ *   RIGHT [OUTER] JOIN       → rightOuter
+ *   FULL [OUTER] JOIN        → fullOuter
  *   CROSS JOIN               → cross
  *
  * ## `OUTER` spelling
  *
- * The documented ABAP CDS **view entity** syntax is `[INNER] JOIN`,
- * `LEFT OUTER JOIN`, `RIGHT OUTER JOIN`, `CROSS JOIN` — `LEFT JOIN` /
- * `RIGHT JOIN` without `OUTER` are therefore rejected for view entities.
+ * The `OUTER` keyword is optional for the outer join types, and the accepted
+ * spellings do **not** depend on the view flavour: a CDS view entity
+ * (`define view entity`) and a classic SQL view (`define view`) accept the
+ * same join syntax. The parser therefore keeps no state about the view
+ * flavour.
  *
- * The legacy `DEFINE VIEW` (classic SQL view) syntax could not be verified
- * against the ABAP keyword documentation, so `LEFT JOIN` / `RIGHT JOIN` stay
- * **accepted** there for compatibility. This decision is *unverified* — see
- * `CdsParser.isViewEntity`.
- *
- * `FULL OUTER JOIN` is not part of the ABAP CDS DDL join syntax and is
- * rejected.
+ * `FULL [OUTER] JOIN` is the SQL-standard full outer join. It is not part of
+ * the ABAP CDS DDL join syntax, but it is supported so that HANA CDS / CAP
+ * CDS sources — which use the standard SQL join syntax — can be read with the
+ * same grammar.
  *
  * ## Condition coverage (`ON` / `WHERE`)
  *
@@ -41,8 +42,12 @@ export const joinsCoverage: GrammarCoverage = {
     // --- supported and tested ---
     'JOIN <source> ON <condition> (inner)',
     'INNER JOIN <source> ON <condition> (inner)',
+    'LEFT JOIN <source> ON <condition> (leftOuter)',
     'LEFT OUTER JOIN <source> ON <condition> (leftOuter)',
+    'RIGHT JOIN <source> ON <condition> (rightOuter)',
     'RIGHT OUTER JOIN <source> ON <condition> (rightOuter)',
+    'FULL JOIN <source> ON <condition> (fullOuter)',
+    'FULL OUTER JOIN <source> ON <condition> (fullOuter)',
     'CROSS JOIN <source> (cross, no ON condition)',
     'chained joins (multiple joins in one FROM clause)',
     'join source alias',
@@ -56,10 +61,8 @@ export const joinsCoverage: GrammarCoverage = {
     'ON condition with a system variable ($projection.Field)',
 
     // --- known limitations (rejected by the parser) ---
-    'FULL OUTER JOIN — not part of the ABAP CDS DDL join syntax',
-    'LEFT JOIN / RIGHT JOIN without OUTER in a view entity',
     'CROSS JOIN with an ON condition',
-    'INNER / LEFT OUTER / RIGHT OUTER JOIN without an ON condition',
+    'INNER / LEFT / RIGHT / FULL JOIN without an ON condition',
     'NOT in an ON predicate',
     'LIKE in an ON predicate',
     'arithmetic operand in an ON predicate (B.k + 1)',
@@ -67,6 +70,5 @@ export const joinsCoverage: GrammarCoverage = {
     // --- not yet verified ---
     'BETWEEN in an ON predicate',
     'IN in an ON predicate',
-    'LEFT JOIN / RIGHT JOIN in a legacy DEFINE VIEW (accepted for compatibility, rule unverified)',
   ],
 };

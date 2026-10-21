@@ -206,7 +206,7 @@ interface DataSourceParameter {
   value: string; // raw binding: ':P_Key1StartDate', '$session.client', "'X'"
 }
 
-type JoinType = 'inner' | 'leftOuter' | 'rightOuter' | 'cross';
+type JoinType = 'inner' | 'leftOuter' | 'rightOuter' | 'fullOuter' | 'cross';
 
 interface JoinClause {
   kind: 'join';
@@ -218,24 +218,27 @@ interface JoinClause {
 
 Supported join spellings (normalized to `JoinType`):
 
-| ABAP CDS spelling  | `joinType`   | Notes                                  |
-| ------------------ | ------------ | -------------------------------------- |
-| `JOIN`             | `inner`      |                                        |
-| `INNER JOIN`       | `inner`      |                                        |
-| `LEFT OUTER JOIN`  | `leftOuter`  |                                        |
-| `RIGHT OUTER JOIN` | `rightOuter` |                                        |
-| `CROSS JOIN`       | `cross`      | must not carry an `ON` condition       |
-| `LEFT JOIN`        | `leftOuter`  | legacy `define view` only — unverified |
-| `RIGHT JOIN`       | `rightOuter` | legacy `define view` only — unverified |
+| spelling           | `joinType`   | Notes                            |
+| ------------------ | ------------ | -------------------------------- |
+| `JOIN`             | `inner`      |                                  |
+| `INNER JOIN`       | `inner`      |                                  |
+| `LEFT JOIN`        | `leftOuter`  | `OUTER` is optional              |
+| `LEFT OUTER JOIN`  | `leftOuter`  |                                  |
+| `RIGHT JOIN`       | `rightOuter` | `OUTER` is optional              |
+| `RIGHT OUTER JOIN` | `rightOuter` |                                  |
+| `FULL JOIN`        | `fullOuter`  | `OUTER` is optional              |
+| `FULL OUTER JOIN`  | `fullOuter`  |                                  |
+| `CROSS JOIN`       | `cross`      | must not carry an `ON` condition |
 
 The `ON` condition is **required** for inner and outer joins and **not allowed**
-for a cross join — the grammar enforces this. `FULL OUTER JOIN` is not part of the
-ABAP CDS DDL join syntax and is rejected.
+for a cross join — the grammar enforces this.
 
-A view entity requires the documented `LEFT OUTER JOIN` / `RIGHT OUTER JOIN`
-spelling. The legacy `define view` (classic SQL view) syntax also accepts
-`LEFT JOIN` / `RIGHT JOIN` — that legacy rule could not be verified against the
-ABAP keyword documentation and is therefore recorded as _unverified_.
+The accepted join syntax is the same for every view flavour: a CDS view entity
+(`define view entity`) and a classic SQL view (`define view`) accept exactly the
+same spellings. `FULL [OUTER] JOIN` is the SQL-standard full outer join — it is
+not part of the ABAP CDS DDL join syntax, but it is supported so that HANA CDS /
+CAP CDS sources (which use the standard SQL join syntax) can be read with the
+same parser.
 
 Example:
 
@@ -294,7 +297,7 @@ Source string
 - ✅ **DCL**: role definitions with grant-select + where clauses
 - ✅ **Annotations**: full value grammar (strings, enums, booleans, numbers, arrays, objects, dotted keys)
 - ✅ **Tooling**: AST walker helpers, semantic validators (`SemanticDiagnostic`), grammar coverage metadata
-- ✅ **FROM clause**: join chains (`inner`, `left [outer]`, `right [outer]`, `cross`), parameterized sources, FROM associations
+- ✅ **FROM clause**: join chains (`inner`, `left [outer]`, `right [outer]`, `full [outer]`, `cross`), parameterized sources, FROM associations
 - 🔜 **Expression grammar** (structured `on`/`where` trees — currently opaque `{ source, tokens }`)
 - 🔜 **CASE**, arithmetic expressions, GROUP BY, UNION
 - 🔜 **`define aspect` (DRAS), `define hierarchy`, cache definitions (DTDC/DTSC), scalar functions (DSFD)**

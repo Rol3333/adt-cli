@@ -318,8 +318,12 @@ export const Default = createToken({
 // ---- JOIN keywords ----------------------------------------------------
 //
 // ABAP CDS supports `JOIN` (= INNER JOIN), `INNER JOIN`, `LEFT [OUTER] JOIN`,
-// `RIGHT [OUTER] JOIN` and `CROSS JOIN`. The keywords are tokenized
-// separately so the parser can normalize the different spellings.
+// `RIGHT [OUTER] JOIN` and `CROSS JOIN`. The SQL-standard `FULL [OUTER] JOIN`
+// is supported as well, so that HANA CDS / CAP CDS sources (which use the
+// standard SQL join syntax) can be read with the same grammar.
+//
+// The keywords are tokenized separately so the parser can normalize the
+// different spellings.
 
 export const Join = createToken({
   name: 'Join',
@@ -348,6 +352,12 @@ export const Right = createToken({
 export const Cross = createToken({
   name: 'Cross',
   pattern: keyword('cross'),
+  longer_alt: Identifier,
+});
+
+export const Full = createToken({
+  name: 'Full',
+  pattern: keyword('full'),
   longer_alt: Identifier,
 });
 
@@ -469,6 +479,7 @@ export const allTokens = [
   Left,
   Right,
   Cross,
+  Full,
   // NOTE: `Outer` must precede `Or` ("or" is a prefix of "outer").
   Outer,
   And,

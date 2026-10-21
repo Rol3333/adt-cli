@@ -243,11 +243,11 @@ export type DataSourceKind = 'select' | 'projection';
 /**
  * Normalized join type.
  *
- * The different ABAP CDS spellings are folded into one vocabulary so that
+ * The different surface spellings are folded into one vocabulary so that
  * downstream consumers (dependency / lineage tooling) do not have to know
  * about surface syntax:
  *
- * | ABAP CDS spelling    | normalized   |
+ * | spelling              | normalized   |
  * |-----------------------|--------------|
  * | `JOIN`                | `inner`      |
  * | `INNER JOIN`          | `inner`      |
@@ -255,9 +255,12 @@ export type DataSourceKind = 'select' | 'projection';
  * | `LEFT OUTER JOIN`     | `leftOuter`  |
  * | `RIGHT JOIN`          | `rightOuter` |
  * | `RIGHT OUTER JOIN`    | `rightOuter` |
+ * | `FULL JOIN`           | `fullOuter`  |
+ * | `FULL OUTER JOIN`     | `fullOuter`  |
  * | `CROSS JOIN`          | `cross`      |
  */
-export type JoinType = 'inner' | 'leftOuter' | 'rightOuter' | 'cross';
+export type JoinType =
+  'inner' | 'leftOuter' | 'rightOuter' | 'fullOuter' | 'cross';
 
 /**
  * A single parameter binding of a parameterized data source.
