@@ -37,7 +37,30 @@ export type {
   NamedTypeRef,
   CdsParseError,
 } from '@abapify/acds';
+
+// FROM clause (view entities)
+export type {
+  ViewEntityDefinition,
+  DataSource,
+  DataSourceParameter,
+  JoinClause,
+  JoinType,
+  AssociationDeclaration,
+  Expression,
+} from '@abapify/acds';
 ```
+
+## FROM clause
+
+View entities expose the whole FROM region:
+
+- `ViewEntityDefinition.source` — the root data source,
+- `ViewEntityDefinition.joins` — the ordered join chain (`joinType` is normalized
+  to `inner` / `leftOuter` / `rightOuter` / `cross`),
+- `ViewEntityDefinition.fromAssociations` — associations declared next to the
+  data source (as opposed to the element-list associations in `members`),
+- `DataSource.parameters` — the bindings of a parameterized source, e.g.
+  `:P_StartDate`, `$session.client` or a literal.
 
 ## Usage
 

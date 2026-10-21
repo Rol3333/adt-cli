@@ -28,6 +28,19 @@ export const BlockComment = createToken({
   group: Lexer.SKIPPED,
 });
 
+/**
+ * SQL-style line comment: `-- some text`.
+ *
+ * ABAP CDS sources (especially the classic `define view` ones) use SQL
+ * comments. The pattern is tried before the `Minus` token, so `--` always
+ * wins over two minus signs.
+ */
+export const SqlLineComment = createToken({
+  name: 'SqlLineComment',
+  pattern: /--[^\n]*/,
+  group: Lexer.SKIPPED,
+});
+
 // ============================================
 // Literals
 // ============================================
@@ -291,6 +304,52 @@ export const Default = createToken({
   longer_alt: Identifier,
 });
 
+// ---- JOIN keywords ----------------------------------------------------
+//
+// ABAP CDS supports `JOIN` (= INNER JOIN), `INNER JOIN`, `LEFT [OUTER] JOIN`,
+// `RIGHT [OUTER] JOIN` and `CROSS JOIN`. The keywords are tokenized
+// separately so the parser can normalize the different spellings.
+
+export const Join = createToken({
+  name: 'Join',
+  pattern: /join/,
+  longer_alt: Identifier,
+});
+
+export const Inner = createToken({
+  name: 'Inner',
+  pattern: /inner/,
+  longer_alt: Identifier,
+});
+
+export const Left = createToken({
+  name: 'Left',
+  pattern: /left/,
+  longer_alt: Identifier,
+});
+
+export const Right = createToken({
+  name: 'Right',
+  pattern: /right/,
+  longer_alt: Identifier,
+});
+
+export const Cross = createToken({
+  name: 'Cross',
+  pattern: /cross/,
+  longer_alt: Identifier,
+});
+
+/**
+ * `OUTER` — must be listed BEFORE `Or`, because `or` is a prefix of `outer`
+ * and the lexer resolves the first matching token in list order.
+ */
+export const Outer = createToken({
+  name: 'Outer',
+  pattern: /outer/,
+  longer_alt: Identifier,
+});
+
 // Operators for simple expressions inside where-clauses / associations
 export const EqEq = createToken({ name: 'EqEq', pattern: /==/ });
 export const Eq = createToken({ name: 'Eq', pattern: /=/ });
@@ -318,6 +377,8 @@ export const Or = createToken({
 
 export const At = createToken({ name: 'At', pattern: /@/ });
 export const Colon = createToken({ name: 'Colon', pattern: /:/ });
+/** `$` — prefix of system variables such as `$session`, `$parameters`, `$projection`. */
+export const Dollar = createToken({ name: 'Dollar', pattern: /\$/ });
 export const Semicolon = createToken({ name: 'Semicolon', pattern: /;/ });
 export const Dot = createToken({ name: 'Dot', pattern: /\./ });
 export const Comma = createToken({ name: 'Comma', pattern: /,/ });
@@ -342,6 +403,7 @@ export const allTokens = [
   WhiteSpace,
   LineComment,
   BlockComment,
+  SqlLineComment,
 
   // Literals
   StringLiteral,
@@ -391,6 +453,13 @@ export const allTokens = [
   Virtual,
   Redirected,
   Default,
+  Join,
+  Inner,
+  Left,
+  Right,
+  Cross,
+  // NOTE: `Outer` must precede `Or` ("or" is a prefix of "outer").
+  Outer,
   And,
   Or,
 
@@ -406,6 +475,7 @@ export const allTokens = [
   // Symbols
   At,
   Colon,
+  Dollar,
   Semicolon,
   Dot,
   Comma,

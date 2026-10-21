@@ -20,11 +20,14 @@ import type {
   CustomEntityDefinition,
   DataSource,
   DataSourceKind,
+  DataSourceParameter,
   Expression,
   ExposeStatement,
   FieldDefinition,
   GrantStatement,
   IncludeDirective,
+  JoinClause,
+  JoinType,
   MetadataExtension,
   NamedTypeRef,
   ParameterDefinition,
@@ -81,6 +84,58 @@ function toExpression(node: CstNode | undefined): Expression {
     source: toks.map((t) => t.image).join(' '),
     tokens: toks.map((t) => t.image),
   };
+}
+
+/** All tokens of a rule context, in source order. */
+function ctxTokens(ctx: Ctx): IToken[] {
+  const out: IToken[] = [];
+  for (const value of Object.values(ctx)) {
+    for (const child of (value ?? []) as Array<CstNode | IToken>) {
+      if ('tokenType' in child) out.push(child as IToken);
+      else out.push(...collectTokenImages(child as CstNode));
+    }
+  }
+  out.sort((a, b) => (a.startOffset ?? 0) - (b.startOffset ?? 0));
+  return out;
+}
+
+/**
+ * Format tokens as source-like text: no space before `(` `,` `)` `]` `.`,
+ * none after `(` and none after `.` — e.g. `coalesce(a.b, c)`.
+ */
+function formatTokens(toks: IToken[]): string {
+  let out = '';
+  for (const t of toks) {
+    const img = t.image;
+    if (!out) {
+      out = img;
+      continue;
+    }
+    const tight =
+      ['(', ',', ')', ']', '.'].includes(img) ||
+      out.endsWith('(') ||
+      out.endsWith('.');
+    out += tight ? img : ` ${img}`;
+  }
+  return out;
+}
+
+/**
+ * Raw text of a CST node — the token images concatenated without separators.
+ * Used for parameter bindings, where the original spelling matters
+ * (`:P_Param`, `$session.client`, `'X'`).
+ */
+function toRawText(node: CstNode | undefined): string {
+  return collectTokenImages(node)
+    .map((t) => t.image)
+    .join('');
+}
+
+/** The FROM region of a view: the root source plus joins and associations. */
+interface FromClause {
+  source: DataSource;
+  joins: JoinClause[];
+  fromAssociations: AssociationDeclaration[];
 }
 
 export class CdsVisitor extends BaseCstVisitor {
@@ -151,15 +206,22 @@ export class CdsVisitor extends BaseCstVisitor {
 
   viewEntityDefinition(ctx: Ctx): ViewEntityDefinition {
     const name = this.visit(asNodes(ctx.cdsName)[0]) as string;
+    // `define view <name>` (legacy classic SQL view) vs `define view entity <name>`
+    const legacy = asTokens(ctx.Entity).length === 0;
     const parameters = ctx.parametersClause
       ? (this.visit(asNodes(ctx.parametersClause)[0]) as ParameterDefinition[])
       : [];
 
     let sourceKind: DataSourceKind = 'select';
     let source: DataSource = { name: '' };
+    let joins: JoinClause[] = [];
+    let fromAssociations: AssociationDeclaration[] = [];
     if (ctx.selectFromClause) {
       sourceKind = 'select';
-      source = this.visit(asNodes(ctx.selectFromClause)[0]) as DataSource;
+      const from = this.visit(asNodes(ctx.selectFromClause)[0]) as FromClause;
+      source = from.source;
+      joins = from.joins;
+      fromAssociations = from.fromAssociations;
     } else if (ctx.projectionOnClause) {
       sourceKind = 'projection';
       source = this.visit(asNodes(ctx.projectionOnClause)[0]) as DataSource;
@@ -179,6 +241,9 @@ export class CdsVisitor extends BaseCstVisitor {
       annotations: [],
       sourceKind,
       source,
+      joins,
+      ...(fromAssociations.length > 0 && { fromAssociations }),
+      ...(legacy && { legacy: true }),
       parameters,
       members,
       ...(where && { where }),
@@ -215,8 +280,15 @@ export class CdsVisitor extends BaseCstVisitor {
     };
   }
 
-  selectFromClause(ctx: Ctx): DataSource {
-    return this.visit(asNodes(ctx.dataSource)[0]) as DataSource;
+  selectFromClause(ctx: Ctx): FromClause {
+    const source = this.visit(asNodes(ctx.dataSource)[0]) as DataSource;
+    const joins = asNodes(ctx.joinClause).map(
+      (node) => this.visit(node) as JoinClause,
+    );
+    const fromAssociations = asNodes(ctx.associationTail).map(
+      (node) => this.visit(node) as AssociationDeclaration,
+    );
+    return { source, joins, fromAssociations };
   }
 
   projectionOnClause(ctx: Ctx): DataSource {
@@ -227,7 +299,51 @@ export class CdsVisitor extends BaseCstVisitor {
     const name = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
     const aliasNode = asNodes(ctx.cdsName)[0];
     const alias = aliasNode ? (this.visit(aliasNode) as string) : undefined;
-    return { name, ...(alias && { alias }) };
+    const parameters = ctx.dataSourceParameters
+      ? (this.visit(
+          asNodes(ctx.dataSourceParameters)[0],
+        ) as DataSourceParameter[])
+      : undefined;
+    return {
+      name,
+      ...(alias && { alias }),
+      ...(parameters && { parameters }),
+    };
+  }
+
+  // ---- Joins -----------------------------------------------
+
+  joinClause(ctx: Ctx): JoinClause {
+    // `JOIN` / `INNER JOIN` are normalized to `inner`.
+    const joinType: JoinType = asTokens(ctx.Cross).length
+      ? 'cross'
+      : asTokens(ctx.Left).length
+        ? 'leftOuter'
+        : asTokens(ctx.Right).length
+          ? 'rightOuter'
+          : 'inner';
+    const source = this.visit(asNodes(ctx.dataSource)[0]) as DataSource;
+    const on = ctx.expression
+      ? toExpression(asNodes(ctx.expression)[0])
+      : undefined;
+    return {
+      kind: 'join',
+      joinType,
+      source,
+      ...(on && { on }),
+    };
+  }
+
+  dataSourceParameters(ctx: Ctx): DataSourceParameter[] {
+    return asNodes(ctx.dataSourceParameter).map(
+      (node) => this.visit(node) as DataSourceParameter,
+    );
+  }
+
+  dataSourceParameter(ctx: Ctx): DataSourceParameter {
+    const name = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
+    const value = toRawText(asNodes(ctx.parameterBinding)[0]);
+    return { name, value };
   }
 
   elementList(ctx: Ctx): ViewMember[] {
@@ -299,10 +415,22 @@ export class CdsVisitor extends BaseCstVisitor {
   }
 
   projectionExpression(ctx: Ctx): { expression: string; alias?: string } {
-    const expression = this.visit(asNodes(ctx.qualifiedName)[0]) as string;
+    const expression = ctx.castExpression
+      ? (this.visit(asNodes(ctx.castExpression)[0]) as { expression: string })
+          .expression
+      : (this.visit(asNodes(ctx.pathOperand)[0]) as { expression: string })
+          .expression;
     const aliasNode = asNodes(ctx.cdsName)[0];
     const alias = aliasNode ? (this.visit(aliasNode) as string) : undefined;
     return { expression, ...(alias && { alias }) };
+  }
+
+  castExpression(ctx: Ctx): { expression: string } {
+    return { expression: formatTokens(ctxTokens(ctx)) };
+  }
+
+  pathOperand(ctx: Ctx): { expression: string } {
+    return { expression: formatTokens(ctxTokens(ctx)) };
   }
 
   // ---- Associations -----------------------------------------
@@ -577,6 +705,27 @@ export class CdsVisitor extends BaseCstVisitor {
   }
 
   operand(): unknown {
+    return null;
+  }
+
+  functionPath(): unknown {
+    return null;
+  }
+
+  functionName(): unknown {
+    return null;
+  }
+
+  parenthesizedExpression(): unknown {
+    return null;
+  }
+
+  systemVariable(): unknown {
+    return null;
+  }
+
+  parameterBinding(): unknown {
+    // The raw binding text is read directly from the CST node.
     return null;
   }
 

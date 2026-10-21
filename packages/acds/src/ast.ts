@@ -240,9 +240,56 @@ export interface AssociationDeclaration extends AstNode {
 
 export type DataSourceKind = 'select' | 'projection';
 
+/**
+ * Normalized join type.
+ *
+ * The different ABAP CDS spellings are folded into one vocabulary so that
+ * downstream consumers (dependency / lineage tooling) do not have to know
+ * about surface syntax:
+ *
+ * | ABAP CDS spelling    | normalized   |
+ * |-----------------------|--------------|
+ * | `JOIN`                | `inner`      |
+ * | `INNER JOIN`          | `inner`      |
+ * | `LEFT JOIN`           | `leftOuter`  |
+ * | `LEFT OUTER JOIN`     | `leftOuter`  |
+ * | `RIGHT JOIN`          | `rightOuter` |
+ * | `RIGHT OUTER JOIN`    | `rightOuter` |
+ * | `CROSS JOIN`          | `cross`      |
+ */
+export type JoinType = 'inner' | 'leftOuter' | 'rightOuter' | 'cross';
+
+/**
+ * A single parameter binding of a parameterized data source.
+ *
+ * `value` keeps the original binding text, e.g. `:P_StartDate` (reference to
+ * a parameter of the consuming view), `$session.client` / `$parameters.P_X`
+ * (system variable) or a literal such as `'X'` / `42`.
+ */
+export interface DataSourceParameter extends AstNode {
+  /** Name of the target parameter, e.g. `P_StartDate`. */
+  name: string;
+  /** Raw binding text as written in the source. */
+  value: string;
+}
+
+/** A data source in a FROM clause: a view, table, projection or parameter. */
 export interface DataSource extends AstNode {
   name: string;
   alias?: string;
+  /** Parameter bindings — present for parameterized sources only. */
+  parameters?: DataSourceParameter[];
+}
+
+/** A join in a FROM clause: `LEFT OUTER JOIN <source> ON <condition>`. */
+export interface JoinClause extends AstNode {
+  kind: 'join';
+  /** Normalized join type (see {@link JoinType}). */
+  joinType: JoinType;
+  /** The joined data source (with optional alias and parameters). */
+  source: DataSource;
+  /** The `ON` condition, captured opaquely. */
+  on?: Expression;
 }
 
 /** Single element in a view's projection list. */
@@ -265,8 +312,25 @@ export interface ViewEntityDefinition extends AstNode {
   kind: 'viewEntity';
   name: string;
   annotations: Annotation[];
+  /**
+   * `true` for the legacy `define view <name>` syntax (classic SQL view).
+   * Absent for `define view entity <name>`.
+   */
+  legacy?: boolean;
   sourceKind: DataSourceKind;
   source: DataSource;
+  /**
+   * Ordered join chain applied to {@link source}. Empty when the view has no
+   * joins. The first entry is joined against `source`, the second against the
+   * result of the first, and so on.
+   */
+  joins: JoinClause[];
+  /**
+   * Associations declared in the FROM region (between the data source and
+   * the element list). Distinct from the associations declared inside the
+   * element list, which are part of {@link members}.
+   */
+  fromAssociations?: AssociationDeclaration[];
   parameters: ParameterDefinition[];
   members: ViewMember[];
   /** Top-level filter clause (`where ...`). */

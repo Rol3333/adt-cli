@@ -7,14 +7,15 @@
  *   - `define type <name> : <type>;`
  *   - `define view entity <name> [with parameters ...]
  *        as (select from | projection on) <source> [{ ... }] [where ...]`
+ *   - `define view <name> ...` — legacy classic SQL view (same body, flagged
+ *     with `legacy: true` in the AST)
  *   - `define abstract entity <name> [with parameters ...] { ... }`
  *   - `define custom entity <name> [with parameters ...] { ... }`
  *   - `define service <name> { expose ...; }` (SRVD)
  *   - `annotate entity <name> with { ... }` (DDLX)
  *
  * Not yet implemented (tracked as open questions in the E09 epic):
- *   - Joins (`inner join`, `left outer join ...`)
- *   - CASE / CAST / arithmetic expressions in projection lists
+ *   - CASE / arithmetic expressions in projection lists
  *   - GROUP BY / HAVING / UNION
  *   - `define aspect` (DRAS), `define hierarchy`, cache definitions (DTDC/DTSC)
  *   - `define scalar function` (DSFD)
@@ -28,6 +29,7 @@ export const ddlCoverage: GrammarCoverage = {
     'define structure',
     'define type',
     'define view entity',
+    'define view (legacy classic SQL view)',
     'define abstract entity',
     'define custom entity',
     'define service',

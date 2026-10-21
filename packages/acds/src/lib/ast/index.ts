@@ -22,6 +22,8 @@ export {
   walkAssociations,
   walkDefinitions,
   walkFields,
+  walkFromAssociations,
+  walkJoins,
   walkParameters,
   walkViewElements,
   findAnnotation,

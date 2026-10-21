@@ -1,0 +1,21 @@
+@AbapCatalog.sqlViewName: 'ZCMMPRITMQ001'
+@AbapCatalog.compiler.compareFilter: true
+@AbapCatalog.preserveKey: true
+@AccessControl.authorizationCheck: #CHECK
+@EndUserText.label: 'Purchase requisition item query'
+define view ZC_PurReqItemQRY001
+  with parameters
+    @EndUserText.label: 'Start date'
+    P_Key1StartDate : vdm_v_key_date,
+    P_Key2EndDate   : vdm_v_key_date
+  as select from ZC_PurReqItemCube
+    ( P_StartDate : :P_Key1StartDate, P_EndDate : :P_Key2EndDate )
+{
+    key PurchaseRequisition,
+    key PurchaseRequisitionItem,
+    -- Units and currencies
+    BaseUnit,
+    cast(0 as abap.curr( 15,  2 )) as ItemInvAmtDiff,
+    cast(PurRecApproveDate as frgdt preserving type ) as PurRecApproveDate,
+    coalesce(InvAmount, 0) as InvAmountSafe
+}

@@ -14,6 +14,7 @@ import type {
   CdsSourceFile,
   CustomEntityDefinition,
   FieldDefinition,
+  JoinClause,
   ParameterDefinition,
   StructureDefinition,
   TableDefinition,
@@ -23,16 +24,12 @@ import type {
 } from '../../ast';
 
 export type WithMembers =
-  | ViewEntityDefinition
-  | AbstractEntityDefinition
-  | CustomEntityDefinition;
+  ViewEntityDefinition | AbstractEntityDefinition | CustomEntityDefinition;
 
 export type WithFields = TableDefinition | StructureDefinition;
 
 export type WithParameters =
-  | ViewEntityDefinition
-  | AbstractEntityDefinition
-  | CustomEntityDefinition;
+  ViewEntityDefinition | AbstractEntityDefinition | CustomEntityDefinition;
 
 /** True when the definition has a `members` array (view-like entities). */
 export function hasMembers(def: CdsDefinition): def is WithMembers {
@@ -115,6 +112,37 @@ export function* walkAssociations(
     for (const m of def.members) {
       if (!isAssociation(m)) continue;
       yield { owner: def, association: m };
+    }
+  }
+}
+
+/**
+ * Yield every association declared in the FROM region of a view entity.
+ *
+ * FROM associations are declared next to the data source (before the element
+ * list) and are therefore kept apart from the associations inside
+ * `members`.
+ */
+export function* walkFromAssociations(file: CdsSourceFile): Iterable<{
+  owner: ViewEntityDefinition;
+  association: AssociationDeclaration;
+}> {
+  for (const def of walkDefinitions(file)) {
+    if (def.kind !== 'viewEntity') continue;
+    for (const a of def.fromAssociations ?? []) {
+      yield { owner: def, association: a };
+    }
+  }
+}
+
+/** Yield every join of every view entity, in source order. */
+export function* walkJoins(
+  file: CdsSourceFile,
+): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
+  for (const def of walkDefinitions(file)) {
+    if (def.kind !== 'viewEntity') continue;
+    for (const join of def.joins ?? []) {
+      yield { owner: def, join };
     }
   }
 }

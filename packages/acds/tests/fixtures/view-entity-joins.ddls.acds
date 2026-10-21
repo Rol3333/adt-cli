@@ -1,0 +1,50 @@
+@AbapCatalog.sqlViewName: 'ZCMMPREQITMCUBE'
+@AbapCatalog.compiler.compareFilter: true
+@AbapCatalog.preserveKey: true
+@AccessControl.authorizationCheck: #CHECK
+@AccessControl.personalData.blocking: #NOT_REQUIRED
+@VDM.viewType: #CONSUMPTION
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@EndUserText.label: 'Purchase requisition item cube'
+define view entity ZC_PurReqItemCube
+  with parameters
+    P_StartDate : bedat,
+    P_EndDate   : bedat
+  as select from I_Purchaserequisitionitem as _Item
+    left outer join ZI_MMPurOrdInvAmtQty as _ZI_MMPurOrdInvAmtQty
+      on  _Item.PurchaseRequisition = _ZI_MMPurOrdInvAmtQty.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _ZI_MMPurOrdInvAmtQty.PurchaseRequisitionItem
+    left outer join ZP_MM_PuReq_AprDat as _PRecApprovalDate
+      on _Item.PurchaseRequisition = _PRecApprovalDate.PurchaseRequisition
+    left outer join ZP_MM_PuReq_ClsDat as _PRecCloseDate
+      on _Item.PurchaseRequisition = _PRecCloseDate.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _PRecCloseDate.PurchaseRequisitionItem
+      and _Item.IsClosed = _PRecCloseDate.IsClosed
+    left outer join ZP_MM_PR_DOC_TF
+      ( mandt: $session.client, p_startdate: $parameters.P_StartDate, p_enddate: $parameters.P_EndDate ) as _PRDocList
+      on _Item.PurchaseRequisition = _PRDocList.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _PRDocList.PurchaseRequisitionItem
+    left outer join pa0105 as p1
+      on _Item.CreatedByUser = p1.usrid
+      and p1.begda <= _Item.CreationDate
+      and p1.endda >= _Item.CreationDate
+      and p1.subty = '0001'
+    inner join pa0001 as p2
+      on p1.pernr = p2.pernr
+      and p2.begda <= _Item.CreationDate
+      and p2.endda >= _Item.CreationDate
+    association [0..1] to ZI_MM_CMCDHDRLAST2 as _LastRelease
+      on _LastRelease.PurchaseRequisition = _Item.PurchaseRequisition
+    association [0..1] to I_Product as _Product
+      on $projection.Product = _Product.Product
+    association [0..1] to I_CompanyCode as _CompanyCode
+      on $projection.CompanyCode = _CompanyCode.CompanyCode
+{
+  key _Item.PurchaseRequisition,
+  key _Item.PurchaseRequisitionItem,
+  _Item.PurchasingDocument,
+  _Item.Material as Product,
+  _Item.CompanyCode,
+  _ZI_MMPurOrdInvAmtQty.BaseUnitOfMeasure as InvBaseUnitOfMeasure,
+  _PRDocList.DocumentList as DocumentList
+}

@@ -65,6 +65,12 @@ import {
   Virtual,
   Redirected,
   Default,
+  Join,
+  Inner,
+  Left,
+  Right,
+  Cross,
+  Outer,
   And,
   Or,
   Identifier,
@@ -79,6 +85,7 @@ import {
   Lt,
   Gt,
   Star,
+  Dollar,
 } from './tokens';
 
 export class CdsParser extends CstParser {
@@ -166,9 +173,13 @@ export class CdsParser extends CstParser {
     'viewEntityDefinition',
     () => {
       this.CONSUME(View);
-      this.CONSUME(Entity);
-      this.SUBRULE(this.cdsName);
+      // `define view entity <name>` (CDS view entity) and the legacy
+      // `define view <name>` (classic SQL view) share the same body.
       this.OPTION(() => {
+        this.CONSUME(Entity);
+      });
+      this.SUBRULE(this.cdsName);
+      this.OPTION2(() => {
         this.SUBRULE(this.parametersClause);
       });
       this.CONSUME(As);
@@ -176,11 +187,11 @@ export class CdsParser extends CstParser {
         { ALT: () => this.SUBRULE(this.selectFromClause) },
         { ALT: () => this.SUBRULE(this.projectionOnClause) },
       ]);
-      this.OPTION2(() => {
+      this.OPTION3(() => {
         this.SUBRULE(this.elementList);
       });
       // optional where at top-level of view (consume expression if present)
-      this.OPTION3(() => {
+      this.OPTION4(() => {
         this.CONSUME(Where);
         this.SUBRULE(this.expression);
       });
@@ -221,6 +232,15 @@ export class CdsParser extends CstParser {
     // CDS allows either "select from X" (view entity syntax) or "select from X".
     // To stay permissive the `from` is optional above.
     this.SUBRULE(this.dataSource);
+    // FROM region: an ordered chain of joins and/or association declarations.
+    // ABAP CDS allows both to appear here; associations are usually written
+    // after the join chain.
+    this.MANY(() => {
+      this.OR([
+        { ALT: () => this.SUBRULE(this.joinClause) },
+        { ALT: () => this.SUBRULE(this.associationTail) },
+      ]);
+    });
   });
 
   private readonly projectionOnClause = this.RULE('projectionOnClause', () => {
@@ -229,11 +249,108 @@ export class CdsParser extends CstParser {
     this.SUBRULE(this.dataSource);
   });
 
+  /**
+   * A data source: `<name> [ ( <parameter bindings> ) ] [ as <alias> ]`.
+   *
+   * The parameter list precedes the alias, e.g.
+   * `ZP_MM_PR_DOC_TF( mandt: $session.client ) as _PRDocList`.
+   */
   private readonly dataSource = this.RULE('dataSource', () => {
     this.SUBRULE(this.qualifiedName);
     this.OPTION(() => {
-      this.OPTION2(() => this.CONSUME(As));
+      this.SUBRULE(this.dataSourceParameters);
+    });
+    this.OPTION2(() => {
+      this.OPTION3(() => this.CONSUME(As));
       this.SUBRULE(this.cdsName);
+    });
+  });
+
+  /** `( <param> : <value> , ... )` — parameter bindings of a data source. */
+  private readonly dataSourceParameters = this.RULE(
+    'dataSourceParameters',
+    () => {
+      this.CONSUME(LParen);
+      this.MANY_SEP({
+        SEP: Comma,
+        DEF: () => {
+          this.SUBRULE(this.dataSourceParameter);
+        },
+      });
+      this.CONSUME(RParen);
+    },
+  );
+
+  /** `<name> : <value>` — a single parameter binding. */
+  private readonly dataSourceParameter = this.RULE(
+    'dataSourceParameter',
+    () => {
+      this.SUBRULE(this.qualifiedName);
+      this.CONSUME(Colon);
+      this.SUBRULE(this.parameterBinding);
+    },
+  );
+
+  /**
+   * The value bound to a source parameter. Kept as written in the source:
+   *   - `:P_Param`   — parameter of the consuming view
+   *   - `$session.client`, `$parameters.P_X` — system variable
+   *   - `'X'`, `42`   — literal
+   */
+  private readonly parameterBinding = this.RULE('parameterBinding', () => {
+    this.OR([
+      {
+        ALT: () => {
+          this.CONSUME(Colon);
+          this.SUBRULE(this.qualifiedName);
+        },
+      },
+      { ALT: () => this.SUBRULE(this.systemVariable) },
+      { ALT: () => this.SUBRULE(this.literal) },
+    ]);
+  });
+
+  // ============================================================
+  // Joins
+  //   [INNER|LEFT [OUTER]|RIGHT [OUTER]|CROSS] JOIN <source> [ON <expr>]
+  // ============================================================
+
+  private readonly joinClause = this.RULE('joinClause', () => {
+    // NOTE: Chevrotain requires unique occurrence indices per rule, hence the
+    // numbered CONSUME/OPTION variants inside the alternatives.
+    this.OR([
+      {
+        ALT: () => {
+          this.CONSUME(Left);
+          this.OPTION(() => this.CONSUME(Outer));
+          this.CONSUME(Join);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(Right);
+          this.OPTION2(() => this.CONSUME2(Outer));
+          this.CONSUME2(Join);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(Cross);
+          this.CONSUME3(Join);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(Inner);
+          this.CONSUME4(Join);
+        },
+      },
+      { ALT: () => this.CONSUME5(Join) },
+    ]);
+    this.SUBRULE(this.dataSource);
+    this.OPTION3(() => {
+      this.CONSUME(On);
+      this.SUBRULE(this.expression);
     });
   });
 
@@ -294,19 +411,55 @@ export class CdsParser extends CstParser {
 
   /**
    * projection expression:
-   *    <qualified-name> [as <alias>]
+   *    <path> [as <alias>]
+   *    <function>( <arg> , ... ) [as <alias>]        e.g. coalesce(a, b), sum(x)
+   *    cast( <value> as <type> [preserving type] ) [as <alias>]
+   *
    * Kept intentionally narrow — full SQL expression support is out of scope.
+   * Only paths, calls and the `cast(...)` form are supported.
    */
   private readonly projectionExpression = this.RULE(
     'projectionExpression',
     () => {
-      this.SUBRULE(this.qualifiedName);
+      this.OR([
+        {
+          GATE: () => this.isCastExpression(),
+          ALT: () => this.SUBRULE(this.castExpression),
+        },
+        { ALT: () => this.SUBRULE(this.pathOperand) },
+      ]);
       this.OPTION(() => {
         this.CONSUME(As);
         this.SUBRULE(this.cdsName);
       });
     },
   );
+
+  /** `cast( <value> as <type> [preserving type] )` */
+  private readonly castExpression = this.RULE('castExpression', () => {
+    this.CONSUME(Identifier); // `cast`
+    this.CONSUME(LParen);
+    this.SUBRULE(this.operand);
+    this.CONSUME(As);
+    this.SUBRULE(this.typeReference);
+    this.OPTION(() => {
+      this.CONSUME2(Identifier); // `preserving`
+      this.CONSUME(Type); // `type`
+    });
+    this.CONSUME(RParen);
+  });
+
+  /** Cheap lookahead: `cast (` — the cast form of a projection element. */
+  private isCastExpression(): boolean {
+    const first = this.LA(1);
+    const second = this.LA(2);
+    if (!first || !second) return false;
+    return (
+      first.tokenType?.name === 'Identifier' &&
+      first.image.toLowerCase() === 'cast' &&
+      second.tokenType?.name === 'LParen'
+    );
+  }
 
   /** Cheap lookahead: `ident :` (optionally following `key`/`virtual`) → typed field. */
   private isTypedField(): boolean {
@@ -651,23 +804,118 @@ export class CdsParser extends CstParser {
     this.SUBRULE(this.operand);
     this.OPTION(() => {
       this.OR([
-        { ALT: () => this.CONSUME(EqEq) },
-        { ALT: () => this.CONSUME(Eq) },
-        { ALT: () => this.CONSUME(NotEq) },
-        { ALT: () => this.CONSUME(LtEq) },
-        { ALT: () => this.CONSUME(GtEq) },
-        { ALT: () => this.CONSUME(Lt) },
-        { ALT: () => this.CONSUME(Gt) },
+        {
+          ALT: () => {
+            this.OR2([
+              { ALT: () => this.CONSUME(EqEq) },
+              { ALT: () => this.CONSUME(Eq) },
+              { ALT: () => this.CONSUME(NotEq) },
+              { ALT: () => this.CONSUME(LtEq) },
+              { ALT: () => this.CONSUME(GtEq) },
+              { ALT: () => this.CONSUME(Lt) },
+              { ALT: () => this.CONSUME(Gt) },
+            ]);
+            this.SUBRULE2(this.operand);
+          },
+        },
+        {
+          // `is null` / `is not null` / `is initial` / `is not initial`
+          GATE: () => this.isIsPredicate(),
+          ALT: () => {
+            this.CONSUME(Identifier); // `is`
+            this.OPTION2(() => this.CONSUME(Not));
+            this.OR3([
+              { ALT: () => this.CONSUME(Null) },
+              { ALT: () => this.CONSUME2(Identifier) }, // `initial`
+            ]);
+          },
+        },
       ]);
-      this.SUBRULE2(this.operand);
     });
   });
+
+  /** Cheap lookahead: `is` — the `is null` / `is initial` predicate. */
+  private isIsPredicate(): boolean {
+    const first = this.LA(1);
+    if (!first) return false;
+    return (
+      first.tokenType?.name === 'Identifier' &&
+      first.image.toLowerCase() === 'is'
+    );
+  }
 
   private readonly operand = this.RULE('operand', () => {
     this.OR([
       { ALT: () => this.SUBRULE(this.literal) },
-      { ALT: () => this.SUBRULE(this.qualifiedName) },
+      { ALT: () => this.SUBRULE(this.systemVariable) },
+      { ALT: () => this.SUBRULE(this.parenthesizedExpression) },
+      { ALT: () => this.SUBRULE(this.pathOperand) },
     ]);
+  });
+
+  /**
+   * A path operand: `<name>[.<name>...]` optionally followed by an argument
+   * list, e.g. `a.b` or `coalesce(a, b)`.
+   *
+   * The arguments are parsed as expressions so that nested structures
+   * (including the commas inside them) are not truncated.
+   */
+  private readonly pathOperand = this.RULE('pathOperand', () => {
+    this.SUBRULE(this.functionPath);
+    this.OPTION(() => {
+      this.CONSUME(LParen);
+      this.OPTION2(() => {
+        this.SUBRULE(this.expression);
+        this.MANY(() => {
+          this.CONSUME(Comma);
+          this.SUBRULE2(this.expression);
+        });
+      });
+      this.CONSUME(RParen);
+    });
+  });
+
+  /** `<name>[.<name>...]` — the name may also be a reserved word. */
+  private readonly functionPath = this.RULE('functionPath', () => {
+    this.SUBRULE(this.functionName);
+    this.MANY(() => {
+      this.CONSUME(Dot);
+      this.SUBRULE2(this.cdsName);
+    });
+  });
+
+  /**
+   * A name that may also be one of the reserved join words.
+   *
+   * CDS uses `left( … )` / `right( … )` as string functions, so the join
+   * keywords have to stay usable as function names.
+   */
+  private readonly functionName = this.RULE('functionName', () => {
+    this.OR([
+      { ALT: () => this.SUBRULE(this.cdsName) },
+      { ALT: () => this.CONSUME(Join) },
+      { ALT: () => this.CONSUME(Inner) },
+      { ALT: () => this.CONSUME(Left) },
+      { ALT: () => this.CONSUME(Right) },
+      { ALT: () => this.CONSUME(Outer) },
+      { ALT: () => this.CONSUME(Cross) },
+    ]);
+  });
+
+  /** `( <expression> )` — a parenthesized sub-condition. */
+  private readonly parenthesizedExpression = this.RULE(
+    'parenthesizedExpression',
+    () => {
+      this.CONSUME(LParen);
+      this.SUBRULE(this.expression);
+      this.CONSUME(RParen);
+    },
+  );
+
+  /** `$session.client`, `$parameters.P_X`, `$projection.Field`. */
+  private readonly systemVariable = this.RULE('systemVariable', () => {
+    this.CONSUME(Dollar);
+    this.SUBRULE(this.qualifiedName);
   });
 
   // ============================================================

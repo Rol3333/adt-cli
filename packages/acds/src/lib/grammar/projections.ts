@@ -4,15 +4,16 @@
  * View body element (per member):
  *   [annotation*] [key] [virtual] [redirected] (
  *       <name> : <type> [not null]    -- typed field (abstract/custom entities)
- *     | <qualified-name> [as <alias>] -- projection element
+ *     | <path> [as <alias>]           -- projection element
+ *     | <func>( <arg> , ... ) [as <alias>]
+ *     | cast( <value> as <type> [preserving type] ) [as <alias>]
  *   ) ;|,
  *
  * Plus any association declarations (see `associations.ts`).
  *
  * Not yet implemented:
- *   - Cast expressions (`cast( ... as ... )`).
  *   - Case / when / else expressions.
- *   - Aggregate functions (`sum`, `min`, ...).
+ *   - Arithmetic operators between operands.
  *   - Window functions.
  *   - Unions / selects combined in element bodies.
  */
@@ -25,6 +26,8 @@ export const projectionsCoverage: GrammarCoverage = {
     'view element with alias',
     'view element with key modifier',
     'view element with virtual modifier',
+    'view element with function call (coalesce(a, b), sum(x))',
+    'view element with cast expression (cast(x as type [preserving type]))',
     'typed field (abstract/custom entity)',
     'view where clause',
     'projection view (as projection on <source>)',

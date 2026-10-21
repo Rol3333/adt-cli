@@ -23,7 +23,12 @@ Parses `.acds` (ABAP CDS DDL) source code into a fully typed Abstract Syntax Tre
 - **Built-in types** — `abap.char(10)`, `abap.dec(11,2)`, `abap.dats`, etc.
 - **Named types** — data element and qualified name references
 - **Include directives** — `include <structure>` with optional suffix
-- **Comments** — line (`//`) and block (`/* */`) comments are skipped
+- **Comments** — line (`//`, `--`) and block (`/* */`) comments are skipped
+- **FROM clause** — join chains, parameterized sources, FROM associations
+- **View flavours** — `define view entity <name>` and the legacy `define view <name>`
+- **Projection elements** — paths, calls (`coalesce(a, b)`, `sum(x)`) and `cast(x as type [preserving type])`
+- **View flavours** — `define view entity <name>` and the legacy `define view <name>`
+- **Projection elements** — paths, calls (`coalesce(a, b)`, `sum(x)`) and `cast(x as type [preserving type])`
 
 ## Installation
 
@@ -173,6 +178,75 @@ type AnnotationValue =
   | { kind: 'object'; properties: AnnotationProperty[] };
 ```
 
+#### FROM clause (view entities)
+
+```typescript
+interface ViewEntityDefinition {
+  kind: 'viewEntity';
+  name: string;
+  annotations: Annotation[];
+  sourceKind: DataSourceKind; // 'select' | 'projection'
+  source: DataSource; // the root data source
+  joins: JoinClause[]; // ordered join chain — empty when there are no joins
+  fromAssociations?: AssociationDeclaration[]; // associations of the FROM region
+  parameters: ParameterDefinition[];
+  members: ViewMember[];
+  where?: Expression;
+}
+
+interface DataSource {
+  name: string;
+  alias?: string;
+  parameters?: DataSourceParameter[]; // parameterized source
+}
+
+interface DataSourceParameter {
+  name: string; // e.g. 'P_StartDate'
+  value: string; // raw binding: ':P_Key1StartDate', '$session.client', "'X'"
+}
+
+type JoinType = 'inner' | 'leftOuter' | 'rightOuter' | 'cross';
+
+interface JoinClause {
+  kind: 'join';
+  joinType: JoinType; // normalized spelling
+  source: DataSource; // the joined source (with alias / parameters)
+  on?: Expression; // the ON condition (opaque)
+}
+```
+
+Supported join spellings (normalized to `JoinType`):
+
+| ABAP CDS spelling  | `joinType`   |
+| ------------------ | ------------ |
+| `JOIN`             | `inner`      |
+| `INNER JOIN`       | `inner`      |
+| `LEFT JOIN`        | `leftOuter`  |
+| `LEFT OUTER JOIN`  | `leftOuter`  |
+| `RIGHT JOIN`       | `rightOuter` |
+| `RIGHT OUTER JOIN` | `rightOuter` |
+| `CROSS JOIN`       | `cross`      |
+
+Example:
+
+```typescript
+const { ast } = parse(`
+  define view entity ZC_Cube as select from I_Item as _Item
+    left outer join ZI_Other as _Other
+      on _Item.key = _Other.key
+    association [0..1] to I_Product as _Product
+      on $projection.Product = _Product.Product
+  {
+    key _Item.key
+  }
+`);
+
+const view = ast.definitions[0] as ViewEntityDefinition;
+view.joins[0].joinType; // 'leftOuter'
+view.joins[0].source.alias; // '_Other'
+view.fromAssociations?.[0].target; // 'I_Product'
+```
+
 #### Errors
 
 ```typescript
@@ -210,8 +284,9 @@ Source string
 - ✅ **DCL**: role definitions with grant-select + where clauses
 - ✅ **Annotations**: full value grammar (strings, enums, booleans, numbers, arrays, objects, dotted keys)
 - ✅ **Tooling**: AST walker helpers, semantic validators (`SemanticDiagnostic`), grammar coverage metadata
+- ✅ **FROM clause**: join chains (`inner`, `left [outer]`, `right [outer]`, `cross`), parameterized sources, FROM associations
 - 🔜 **Expression grammar** (structured `on`/`where` trees — currently opaque `{ source, tokens }`)
-- 🔜 **Joins** (`inner join`, `left outer join …`), CASE/CAST, aggregates, GROUP BY, UNION
+- 🔜 **CASE**, arithmetic expressions, GROUP BY, UNION
 - 🔜 **`define aspect` (DRAS), `define hierarchy`, cache definitions (DTDC/DTSC), scalar functions (DSFD)**
 - 🔜 **BDEF / behavior definitions** (owned by epic E10)
 

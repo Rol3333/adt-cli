@@ -7,6 +7,9 @@ export type {
   ViewElement,
   DataSource,
   DataSourceKind,
+  DataSourceParameter,
+  JoinClause,
+  JoinType,
   ParameterDefinition,
   Expression,
 } from '../../ast';

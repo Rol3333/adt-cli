@@ -15,15 +15,16 @@
 
 ## Grammar coverage
 
-| Topic          | Constructs                                                                                                                                                     |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ddl`          | `define table`, `define structure`, `define type`, `define view entity`, `define abstract entity`, `define custom entity`, `define service`, `annotate entity` |
-| `dcl`          | `define role … { grant select on <entity> [where …] }`                                                                                                         |
-| `annotations`  | `@Key`, `@Key:value`, arrays, nested objects, dotted property keys                                                                                             |
-| `associations` | `association`, `composition`, cardinality `[L..U]` / `[*]` / `[N]`, `of many/one`, `redirected to`, `on <expr>`, `as <alias>`                                  |
-| `parameters`   | `with parameters p : <type> [default <literal>]`, annotated parameters                                                                                         |
-| `projections`  | key / virtual / redirected modifiers, typed fields (abstract/custom entities), `where` clauses                                                                 |
-| `actions`      | _placeholder — owned by E10 (BDEF)_                                                                                                                            |
+| Topic          | Constructs                                                                                                                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ddl`          | `define table`, `define structure`, `define type`, `define view entity`, `define view` (legacy), `define abstract entity`, `define custom entity`, `define service`, `annotate entity` |
+| `dcl`          | `define role … { grant select on <entity> [where …] }`                                                                                                                                 |
+| `annotations`  | `@Key`, `@Key:value`, arrays, nested objects, dotted property keys                                                                                                                     |
+| `associations` | `association`, `composition`, cardinality `[L..U]` / `[*]` / `[N]`, `of many/one`, `redirected to`, `on <expr>`, `as <alias>`                                                          |
+| `joins`        | `JOIN` / `INNER JOIN` / `LEFT [OUTER] JOIN` / `RIGHT [OUTER] JOIN` / `CROSS JOIN`, chained joins, parameterized sources, `ON <expr>`                                                   |
+| `parameters`   | `with parameters p : <type> [default <literal>]`, annotated parameters                                                                                                                 |
+| `projections`  | key / virtual / redirected modifiers, typed fields (abstract/custom entities), `where` clauses                                                                                         |
+| `actions`      | _placeholder — owned by E10 (BDEF)_                                                                                                                                                    |
 
 The coverage metadata is exported at runtime via `GRAMMAR_COVERAGE` for tooling / docs.
 
@@ -86,6 +87,8 @@ In `tokens.ts`:
 
 CDS sources commonly use keywords as identifiers (e.g. `@ObjectModel.association.type`). The `cdsName` rule in the parser accepts every keyword that can legally appear as a name. When adding a new keyword, **append it to the `cdsName` rule** if it might be used as an identifier anywhere.
 
+**Exception — the join keywords** (`join`, `inner`, `left`, `right`, `outer`, `cross`) are deliberately **not** part of `cdsName`. The optional alias of a data source is parsed as `[as] <cdsName>`; if the join keywords were accepted as names, the alias would swallow the `join` that starts the next join clause. Keep them out of `cdsName` unless the grammar is restructured (e.g. with a dedicated `dataSourceAlias` rule).
+
 ### Parser Rules
 
 - `recoveryEnabled: true` — malformed input produces partial CST + errors
@@ -98,6 +101,38 @@ CDS sources commonly use keywords as identifiers (e.g. `@ObjectModel.association
 
 1. Parse the token stream themselves; or
 2. Wait for the expression grammar to be expanded (tracked as open question in the epic).
+
+The condition grammar accepts comparisons, `AND` / `OR` chains, parenthesized sub-conditions, call arguments (`coalesce(a, b)`), `is null` / `is not initial` predicates and system variables (`$session.client`, `$parameters.P_X`, `$projection.Field`). The capture is complete — it is **not** truncated at boolean operators, commas or parentheses.
+
+### Projection elements
+
+A projection element is one of
+
+```abap
+<path> [as <alias>]                                       -- zi.PurchaseRequisition
+<func>( <arg>, ... ) [as <alias>]                        -- coalesce(a, b), sum(x)
+cast( <value> as <type> [preserving type] ) [as <alias>]  -- cast(0 as abap.curr(15,2))
+```
+
+The expression text is preserved verbatim (reformatted only in whitespace). `CASE … END` and arithmetic between operands are **not** supported yet.
+
+### View flavours
+
+`define view entity <name>` (CDS view entity) and the legacy `define view <name>` (classic SQL view) share the same grammar body; the AST marks the legacy form with `legacy: true`.
+
+### FROM clause
+
+`select from <source>` may be followed by a chain of joins and/or association declarations:
+
+```abap
+as select from I_Item as _Item
+  left outer join ZI_Other as _Other on _Item.key = _Other.key
+  association [0..1] to I_Product as _Product on $projection.Product = _Product.Product
+```
+
+- joins land in `ViewEntityDefinition.joins` (ordered, `joinType` normalized),
+- FROM associations land in `ViewEntityDefinition.fromAssociations` (kept apart from the element-list associations in `members`),
+- parameterized sources carry `DataSource.parameters` with the raw binding text.
 
 ## Consumers
 
@@ -115,7 +150,7 @@ bunx nx test acds
 Tests live in:
 
 - `src/parser.test.ts` — legacy Phase 1 coverage (TABL/structure/type/service/annotate)
-- `tests/grammar/*.test.ts` — per-topic grammar coverage
+- `tests/grammar/*.test.ts` — per-topic grammar coverage (`joins.test.ts`, `from-associations.test.ts`, …)
 - `tests/fixtures.test.ts` — parses every file under `tests/fixtures/` without errors
 - `tests/walker.test.ts` — AST traversal helpers
 - `tests/validate.test.ts` — semantic validators
