@@ -1,0 +1,20 @@
+@AbapCatalog.sqlViewName: 'ZTSAMPLEQRY'
+@AbapCatalog.compiler.compareFilter: true
+@AbapCatalog.preserveKey: true
+@AccessControl.authorizationCheck: #CHECK
+@EndUserText.label: 'Sample item query'
+define view ZTEST_SampleQuery
+  with parameters
+    @EndUserText.label: 'Start date'
+    P_Key1StartDate : abap.dats,
+    P_Key2EndDate   : abap.dats
+  as select from ZTEST_SampleCube
+    ( P_StartDate : :P_Key1StartDate, P_EndDate : :P_Key2EndDate ) {
+    key PurchaseRequisition,
+    key PurchaseRequisitionItem,
+    -- Units and currencies
+    BaseUnit,
+    cast(0 as abap.curr( 15,  2 )) as ItemInvAmtDiff,
+    cast(PurRecApproveDate as abap.dats preserving type ) as PurRecApproveDate,
+    coalesce(InvAmount, 0) as InvAmountSafe
+}

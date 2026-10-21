@@ -7,12 +7,16 @@
  *   - lower <= upper (when both numeric)
  */
 import type { CdsSourceFile } from '../../ast';
-import { walkAssociations } from '../ast/walker';
+import { walkAssociations, walkFromAssociations } from '../ast/walker';
 import type { SemanticDiagnostic } from './index';
 
 export function validateCardinality(file: CdsSourceFile): SemanticDiagnostic[] {
   const diagnostics: SemanticDiagnostic[] = [];
-  for (const { association } of walkAssociations(file)) {
+  const associations = [
+    ...walkAssociations(file),
+    ...walkFromAssociations(file),
+  ];
+  for (const { association } of associations) {
     const card = association.cardinality;
     if (!card) continue;
 

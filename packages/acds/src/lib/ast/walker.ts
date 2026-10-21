@@ -13,10 +13,18 @@ import type {
   CdsDefinition,
   CdsSourceFile,
   CustomEntityDefinition,
+  ExtensionDefinition,
+  ExternalEntityDefinition,
   FieldDefinition,
+  HierarchyDefinition,
+  JoinClause,
+  JoinSource,
   ParameterDefinition,
+  SelectStatement,
+  ScalarFunctionDefinition,
   StructureDefinition,
   TableDefinition,
+  TableFunctionDefinition,
   ViewElement,
   ViewEntityDefinition,
   ViewMember,
@@ -25,34 +33,55 @@ import type {
 export type WithMembers =
   | ViewEntityDefinition
   | AbstractEntityDefinition
-  | CustomEntityDefinition;
+  | CustomEntityDefinition
+  | HierarchyDefinition
+  | ExtensionDefinition;
 
-export type WithFields = TableDefinition | StructureDefinition;
+export type WithFields =
+  | TableDefinition
+  | StructureDefinition
+  | ExternalEntityDefinition
+  | TableFunctionDefinition;
 
 export type WithParameters =
   | ViewEntityDefinition
   | AbstractEntityDefinition
-  | CustomEntityDefinition;
+  | CustomEntityDefinition
+  | ExternalEntityDefinition
+  | TableFunctionDefinition
+  | ScalarFunctionDefinition
+  | HierarchyDefinition;
 
 /** True when the definition has a `members` array (view-like entities). */
 export function hasMembers(def: CdsDefinition): def is WithMembers {
   return (
     def.kind === 'viewEntity' ||
     def.kind === 'abstractEntity' ||
-    def.kind === 'customEntity'
+    def.kind === 'customEntity' ||
+    def.kind === 'hierarchy' ||
+    def.kind === 'extension'
   );
 }
 
 /** True when the definition has a `members` array of typed fields (TABL/structure). */
 export function hasFields(def: CdsDefinition): def is WithFields {
-  return def.kind === 'table' || def.kind === 'structure';
+  return (
+    def.kind === 'table' ||
+    def.kind === 'structure' ||
+    def.kind === 'externalEntity' ||
+    def.kind === 'tableFunction'
+  );
 }
 
 export function hasParameters(def: CdsDefinition): def is WithParameters {
   return (
     def.kind === 'viewEntity' ||
     def.kind === 'abstractEntity' ||
-    def.kind === 'customEntity'
+    def.kind === 'customEntity' ||
+    def.kind === 'externalEntity' ||
+    def.kind === 'tableFunction' ||
+    def.kind === 'scalarFunction' ||
+    def.kind === 'hierarchy'
   );
 }
 
@@ -68,21 +97,19 @@ export function* walkDefinitions(file: CdsSourceFile): Iterable<CdsDefinition> {
 export function* walkAnnotations(file: CdsSourceFile): Iterable<Annotation> {
   for (const def of walkDefinitions(file)) {
     for (const a of getAnnotations(def)) yield a;
-    if (hasFields(def)) {
-      for (const m of def.members) {
-        if ('annotations' in m) {
-          for (const a of m.annotations) yield a;
+    // Member pools that can carry annotations: fields/members (whichever the
+    // definition supports), parameters, and extension-level associations.
+    const pools: ReadonlyArray<readonly unknown[]> = [];
+    if (hasFields(def)) pools.push(def.members);
+    if (hasMembers(def)) pools.push(def.members);
+    if (def.kind === 'aspect') pools.push(def.members);
+    if (hasParameters(def)) pools.push(def.parameters);
+    if (def.kind === 'extension') pools.push(def.associations);
+    for (const pool of pools) {
+      for (const m of pool) {
+        if (typeof m === 'object' && m !== null && 'annotations' in m) {
+          for (const a of m.annotations as Annotation[]) yield a;
         }
-      }
-    }
-    if (hasMembers(def)) {
-      for (const m of def.members) {
-        for (const a of m.annotations) yield a;
-      }
-    }
-    if (hasParameters(def)) {
-      for (const p of def.parameters) {
-        for (const a of p.annotations) yield a;
       }
     }
   }
@@ -112,11 +139,101 @@ export function* walkAssociations(
 ): Iterable<{ owner: WithMembers; association: AssociationDeclaration }> {
   for (const def of walkDefinitions(file)) {
     if (!hasMembers(def)) continue;
-    for (const m of def.members) {
-      if (!isAssociation(m)) continue;
-      yield { owner: def, association: m };
+    const pools: AssociationDeclaration[][] = [
+      def.members.filter(isAssociation),
+    ];
+    if (def.kind === 'extension') pools.push(def.associations);
+    for (const association of pools.flat()) {
+      yield { owner: def, association };
     }
   }
+}
+
+/**
+ * Yield every association declared in the FROM region of a view entity.
+ *
+ * FROM associations are declared next to the data source (before the element
+ * list) and are therefore kept apart from the associations inside
+ * `members`.
+ */
+export function* walkFromAssociations(file: CdsSourceFile): Iterable<{
+  owner: ViewEntityDefinition;
+  association: AssociationDeclaration;
+}> {
+  for (const def of walkDefinitions(file)) {
+    if (def.kind !== 'viewEntity') continue;
+    yield* fromAssocOfSelect(def, def);
+    // Set-operation branches (`union … select …`) carry their own FROM
+    // associations.
+    for (const op of def.setOperations ?? []) {
+      yield* fromAssocOfSelect(def, op.statement);
+    }
+  }
+}
+
+function* fromAssocOfSelect(
+  owner: ViewEntityDefinition,
+  select: {
+    fromAssociations?: AssociationDeclaration[];
+    setOperations?: { statement: SelectStatement }[];
+  },
+): Iterable<{
+  owner: ViewEntityDefinition;
+  association: AssociationDeclaration;
+}> {
+  for (const a of select.fromAssociations ?? []) {
+    yield { owner, association: a };
+  }
+  for (const op of select.setOperations ?? []) {
+    yield* fromAssocOfSelect(owner, op.statement);
+  }
+}
+
+/** Yield every join of every view entity, in source order. */
+export function* walkJoins(
+  file: CdsSourceFile,
+): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
+  for (const def of walkDefinitions(file)) {
+    if (def.kind !== 'viewEntity') continue;
+    yield* walkJoinChain(def, def.joins ?? []);
+    // Set-operation branches (`union … select …`) carry their own joins.
+    for (const op of def.setOperations ?? []) {
+      yield* walkSelectJoins(def, op.statement);
+    }
+  }
+}
+
+function* walkSelectJoins(
+  owner: ViewEntityDefinition,
+  select: {
+    joins?: JoinClause[];
+    setOperations?: { statement: SelectStatement }[];
+  },
+): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
+  yield* walkJoinChain(owner, select.joins ?? []);
+  for (const op of select.setOperations ?? []) {
+    yield* walkSelectJoins(owner, op.statement);
+  }
+}
+
+function* walkJoinChain(
+  owner: ViewEntityDefinition,
+  joins: JoinClause[],
+): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
+  for (const join of joins) {
+    yield { owner, join };
+    yield* walkJoinSource(owner, join.source);
+  }
+}
+
+/** Descend into a grouped join source (`join (A join B on …) on …`). */
+function* walkJoinSource(
+  owner: ViewEntityDefinition,
+  source: JoinSource,
+): Iterable<{ owner: ViewEntityDefinition; join: JoinClause }> {
+  if (source.kind !== 'joinGroup') return;
+  yield* walkJoinSource(owner, source.source);
+  yield* walkJoinChain(owner, source.joins);
 }
 
 /** Yield every field definition from tables and structures. */

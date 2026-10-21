@@ -18,6 +18,7 @@ export { ddlCoverage } from './ddl';
 export { dclCoverage } from './dcl';
 export { annotationsCoverage } from './annotations';
 export { associationsCoverage } from './associations';
+export { joinsCoverage } from './joins';
 export { parametersCoverage } from './parameters';
 export { projectionsCoverage } from './projections';
 export { actionsCoverage } from './actions';
@@ -26,6 +27,7 @@ import { ddlCoverage } from './ddl';
 import { dclCoverage } from './dcl';
 import { annotationsCoverage } from './annotations';
 import { associationsCoverage } from './associations';
+import { joinsCoverage } from './joins';
 import { parametersCoverage } from './parameters';
 import { projectionsCoverage } from './projections';
 import { actionsCoverage } from './actions';
@@ -35,6 +37,7 @@ export const GRAMMAR_COVERAGE: readonly GrammarCoverage[] = [
   dclCoverage,
   annotationsCoverage,
   associationsCoverage,
+  joinsCoverage,
   parametersCoverage,
   projectionsCoverage,
   actionsCoverage,

@@ -1,0 +1,58 @@
+@AbapCatalog.entityBuffer.definitionAllowed: true
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Extended view entity coverage'
+define root view entity Z_SALES_ORDER_X
+  with parameters
+    @EndUserText.label: 'Language'
+    p_lang : abap.lang
+  as select distinct from I_SalesOrder as _so
+    inner to one join I_SalesOrderType as _type
+      on _so.SalesOrderType = _type.SalesOrderType
+    left outer join I_Customer as _cust
+      on _so.SoldToParty = _cust.Customer
+    cross join I_CompanyCode as _cc
+    many to one join I_SalesOrganization as _org
+      on _so.SalesOrganization = _org.SalesOrganization
+  association [0..*] to I_SalesOrderItem as _item
+    on $projection.SalesOrder = _item.SalesOrder
+  association to parent Z_SALES_ROOT as _parent
+    on _so.SalesOrder = _parent.Key
+{
+  key _so.SalesOrder,
+      _so.SoldToParty          as Customer,
+      _cust.CustomerName       as CustomerName,
+      cast(_so.NetAmount as abap.dec(15, 2) preserving type) as NetAmount,
+      coalesce(_so.Note, 'n/a') as Note,
+      case _so.OrderStatus
+        when 'N' then 'new'
+        when 'P' then 'pending'
+        else 'done'
+      end                     as StatusText,
+      _so.NetAmount + _so.TaxAmount as GrossAmount,
+      _item,
+      _parent
+}
+where  _so.SalesOrder is not initial
+  and  _so.NetAmount between 0 and 100000
+  and  _so.OrderStatus in ('N', 'P')
+  and  not _so.IsDeleted = 'X'
+group by
+  _so.SalesOrder,
+  _so.SoldToParty,
+  _cust.CustomerName
+having count(*) > 0
+union all
+  select from I_SalesOrderArchive as _arch
+  association to parent Z_SALES_ROOT as _parent
+    on _arch.SalesOrder = _parent.Key
+  {
+    key _arch.SalesOrder,
+        _arch.SoldToParty as Customer,
+        'archived'        as CustomerName,
+        _arch.NetAmount   as NetAmount,
+        'n/a'             as Note,
+        'done'            as StatusText,
+        _arch.NetAmount   as GrossAmount,
+        _arch._item       as Item,
+        _parent
+  }

@@ -1,0 +1,10 @@
+@EndUserText.label: 'Inherited sales role'
+define role Z_SALES_INHERITED switchable {
+  grant select on I_SalesOrder
+    with optional elements (SalesOrder default true, SoldToParty)
+    combination mode or
+    where aspect pfcg_auth (actvt = '03');
+  inherit Z_BASE_ROLE for grant select on I_SalesOrder
+    where SoldToParty = '1000';
+  inheriting conditions from entity I_SalesOrder default true;
+}

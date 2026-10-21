@@ -1,0 +1,49 @@
+@AbapCatalog.compiler.compareFilter: true
+@AbapCatalog.preserveKey: true
+@AccessControl.authorizationCheck: #CHECK
+@AccessControl.personalData.blocking: #NOT_REQUIRED
+@VDM.viewType: #CONSUMPTION
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@EndUserText.label: 'Sample item cube'
+define view entity ZTEST_SampleCube
+  with parameters
+    P_StartDate : abap.dats,
+    P_EndDate   : abap.dats
+  as select from I_SampleItem as _Item
+    left outer join ZTEST_ItemAmounts as _Amounts
+      on  _Item.PurchaseRequisition = _Amounts.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _Amounts.PurchaseRequisitionItem
+    left outer join ZTEST_ApprovalView as _ApprovalDate
+      on _Item.PurchaseRequisition = _ApprovalDate.PurchaseRequisition
+    left outer join ZTEST_ClosureView as _ClosureDate
+      on _Item.PurchaseRequisition = _ClosureDate.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _ClosureDate.PurchaseRequisitionItem
+      and _Item.IsClosed = _ClosureDate.IsClosed
+    left outer join ZTEST_DocumentView
+      ( mandt: $session.client, p_startdate: $parameters.P_StartDate, p_enddate: $parameters.P_EndDate ) as _DocumentList
+      on _Item.PurchaseRequisition = _DocumentList.PurchaseRequisition
+      and _Item.PurchaseRequisitionItem = _DocumentList.PurchaseRequisitionItem
+    left outer join ZTEST_USER_LIST as p1
+      on _Item.CreatedByUser = p1.usrid
+      and p1.begda <= _Item.CreationDate
+      and p1.endda >= _Item.CreationDate
+      and p1.subty = '0001'
+    inner join ZTEST_USER_ORG as p2
+      on p1.pernr = p2.pernr
+      and p2.begda <= _Item.CreationDate
+      and p2.endda >= _Item.CreationDate
+    association [0..1] to ZTEST_LastRelease as _LastRelease
+      on _LastRelease.PurchaseRequisition = _Item.PurchaseRequisition
+    association [0..1] to I_SampleProduct as _Product
+      on $projection.Product = _Product.Product
+    association [0..1] to I_SampleCompanyCode as _CompanyCode
+      on $projection.CompanyCode = _CompanyCode.CompanyCode
+{
+  key _Item.PurchaseRequisition,
+  key _Item.PurchaseRequisitionItem,
+  _Item.PurchasingDocument,
+  _Item.Material as Product,
+  _Item.CompanyCode,
+  _Amounts.BaseUnitOfMeasure as InvBaseUnitOfMeasure,
+  _DocumentList.DocumentList as DocumentList
+}

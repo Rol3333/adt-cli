@@ -37,7 +37,47 @@ export type {
   NamedTypeRef,
   CdsParseError,
 } from '@abapify/acds';
+
+// FROM clause (view entities)
+export type {
+  ViewEntityDefinition,
+  DataSource,
+  DataSourceParameter,
+  JoinClause,
+  JoinType,
+  AssociationDeclaration,
+  Expression,
+} from '@abapify/acds';
 ```
+
+## FROM clause
+
+View entities expose the whole FROM region:
+
+- `ViewEntityDefinition.source` — the root data source,
+- `ViewEntityDefinition.joins` — the ordered join chain (`joinType` is normalized
+  to `inner` / `leftOuter` / `rightOuter` / `fullOuter` / `cross`),
+- `ViewEntityDefinition.fromAssociations` — associations declared next to the
+  data source (as opposed to the element-list associations in `members`),
+- `DataSource.parameters` — the bindings of a parameterized source, e.g.
+  `:P_StartDate`, `$session.client` or a literal.
+
+Join syntax:
+
+- the `ON` condition is required for `[INNER] JOIN`, `LEFT [OUTER] JOIN`,
+  `RIGHT [OUTER] JOIN` and `FULL [OUTER] JOIN`, and not allowed for
+  `CROSS JOIN`,
+- the `OUTER` keyword is optional: `LEFT JOIN` and `LEFT OUTER JOIN` are both
+  accepted and both normalized to `leftOuter`,
+- `FULL [OUTER] JOIN` (the SQL-standard full outer join) is supported and
+  normalized to `fullOuter` — it is not part of the ABAP CDS DDL join syntax,
+  but it is needed to read HANA CDS / CAP CDS sources, which use the standard
+  SQL join syntax,
+- the accepted spellings are the same for a CDS view entity
+  (`define view entity`) and a classic SQL view (`define view`).
+
+Keywords are matched case-insensitively — `DEFINE VIEW ENTITY` and
+`define view entity` both parse, and identifiers keep their original spelling.
 
 ## Usage
 
