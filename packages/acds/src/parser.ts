@@ -222,6 +222,17 @@ export class CdsParser extends CstParser {
       In,
     ]);
 
+  /** Bracket depth delta per token for the case-expression scan. */
+  private static readonly DEPTH_DELTA: ReadonlyMap<TokenType, number> = new Map<
+    TokenType,
+    number
+  >([
+    [LParen, 1],
+    [LBracket, 1],
+    [RParen, -1],
+    [RBracket, -1],
+  ]);
+
   /** Tokens that mark a parenthesized group as a *condition*. */
   private static readonly CONDITION_MARKER_SET: ReadonlySet<TokenType> =
     new Set<TokenType>([
@@ -1198,35 +1209,36 @@ export class CdsParser extends CstParser {
    */
   private isParenCondition(): boolean {
     if (this.LA(1).tokenType !== LParen) return false;
-    // Find the matching `)`.
-    let depth = 0;
-    let close = -1;
-    for (let i = 1; i < 400; i += 1) {
-      const t = this.LA(i).tokenType;
-      if (t === EOF) return false;
-      if (t === LParen) depth += 1;
-      else if (t === RParen) {
-        depth -= 1;
-        if (depth === 0) {
-          close = i;
-          break;
-        }
-      }
-    }
+    const close = this.matchingParen(1);
     if (close < 0) return false;
     // A comparison operator directly after `)` → the group is an operand.
     if (this.isComparisonToken(this.LA(close + 1))) return false;
     // Predicate-ish token inside the parens (any depth) → condition.
     for (let i = 2; i < close; i += 1) {
-      const tok = this.LA(i);
-      if (
-        CdsParser.CONDITION_MARKER_SET.has(tok.tokenType) ||
-        this.isIsKeyword(tok)
-      ) {
-        return true;
-      }
+      if (this.isConditionMarker(this.LA(i))) return true;
     }
     return false;
+  }
+
+  /** Index of the `)` matching the `(` at `from`, or -1 (EOF/unbalanced). */
+  private matchingParen(from: number): number {
+    let depth = 0;
+    for (let i = from; i < from + 400; i += 1) {
+      const t = this.LA(i).tokenType;
+      if (t === EOF) return -1;
+      if (t === LParen) depth += 1;
+      else if (t === RParen) {
+        depth -= 1;
+        if (depth === 0) return i;
+      }
+    }
+    return -1;
+  }
+
+  private isConditionMarker(tok: IToken): boolean {
+    return (
+      CdsParser.CONDITION_MARKER_SET.has(tok.tokenType) || this.isIsKeyword(tok)
+    );
   }
 
   private isComparisonToken(tok: IToken): boolean {
@@ -1251,18 +1263,17 @@ export class CdsParser extends CstParser {
     // `when` is still a case expression.
     for (let i = 2; i < 500; i += 1) {
       const t = this.LA(i).tokenType;
-      if (t === EOF) return false;
-      if (t === LParen || t === LBracket) depth += 1;
-      else if (t === RParen || t === RBracket) {
-        if (depth === 0) return false;
-        depth -= 1;
-      } else if (depth === 0 && [RBrace, Semicolon, Comma].includes(t)) {
-        return false;
-      } else if (depth === 0 && t === When) {
-        return true;
-      }
+      if (this.caseScanEnds(t, depth)) return false;
+      if (depth === 0 && t === When) return true;
+      depth += CdsParser.DEPTH_DELTA.get(t) ?? 0;
     }
     return false;
+  }
+
+  private caseScanEnds(t: TokenType, depth: number): boolean {
+    if (t === EOF) return true;
+    if (depth !== 0) return false;
+    return [RBrace, Semicolon, Comma, RParen, RBracket].includes(t);
   }
 
   // ============================================================
@@ -1690,26 +1701,25 @@ export class CdsParser extends CstParser {
    */
   private isAspectTypedValue(): boolean {
     const typeAt = (n: number) => this.LA(n).tokenType;
-    let i = 1;
-    if (typeAt(i) === Abap) {
-      // `abap.x[(n[,m])]`
-      i += 1;
-      if (typeAt(i) !== Dot) return false;
-      i += 1;
-      if (!this.isNameToken(this.LA(i))) return false;
-      i += 1;
-      if (typeAt(i) === LParen) {
-        // `LA()` returns the EOF token past the end of input — the loop
-        // must stop on it or a truncated `abap.char(` scans forever.
-        while (typeAt(i) !== RParen && typeAt(i) !== EOF) i += 1;
-        i += 1;
-      }
-      return typeAt(i) === Semicolon;
-    }
-    if (!this.isNameToken(this.LA(i))) return false;
-    i += 1;
+    if (typeAt(1) === Abap) return this.abapTypeEndsAtSemicolon();
+    if (!this.isNameToken(this.LA(1))) return false;
+    let i = 2;
     while (typeAt(i) === Dot && this.isNameToken(this.LA(i + 1))) i += 2;
     // A `(` after a non-`abap` name is a function call, not a type.
+    return typeAt(i) === Semicolon;
+  }
+
+  /** `abap.x[(n[,m])]` followed by `;` — a builtin aspect type. */
+  private abapTypeEndsAtSemicolon(): boolean {
+    const typeAt = (n: number) => this.LA(n).tokenType;
+    if (typeAt(2) !== Dot || !this.isNameToken(this.LA(3))) return false;
+    let i = 4;
+    if (typeAt(i) === LParen) {
+      // `LA()` returns the EOF token past the end of input — the loop
+      // must stop on it or a truncated `abap.char(` scans forever.
+      while (typeAt(i) !== RParen && typeAt(i) !== EOF) i += 1;
+      i += 1;
+    }
     return typeAt(i) === Semicolon;
   }
 

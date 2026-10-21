@@ -97,31 +97,19 @@ export function* walkDefinitions(file: CdsSourceFile): Iterable<CdsDefinition> {
 export function* walkAnnotations(file: CdsSourceFile): Iterable<Annotation> {
   for (const def of walkDefinitions(file)) {
     for (const a of getAnnotations(def)) yield a;
-    if (hasFields(def)) {
-      for (const m of def.members) {
-        if ('annotations' in m) {
-          for (const a of m.annotations) yield a;
+    // Member pools that can carry annotations: fields/members (whichever the
+    // definition supports), parameters, and extension-level associations.
+    const pools: ReadonlyArray<readonly unknown[]> = [];
+    if (hasFields(def)) pools.push(def.members);
+    if (hasMembers(def)) pools.push(def.members);
+    if (def.kind === 'aspect') pools.push(def.members);
+    if (hasParameters(def)) pools.push(def.parameters);
+    if (def.kind === 'extension') pools.push(def.associations);
+    for (const pool of pools) {
+      for (const m of pool) {
+        if (typeof m === 'object' && m !== null && 'annotations' in m) {
+          for (const a of m.annotations as Annotation[]) yield a;
         }
-      }
-    }
-    if (hasMembers(def)) {
-      for (const m of def.members) {
-        for (const a of m.annotations) yield a;
-      }
-    }
-    if (hasParameters(def)) {
-      for (const p of def.parameters) {
-        for (const a of p.annotations) yield a;
-      }
-    }
-    if (def.kind === 'aspect') {
-      for (const m of def.members) {
-        for (const a of m.annotations) yield a;
-      }
-    }
-    if (def.kind === 'extension') {
-      for (const a of def.associations) {
-        for (const an of a.annotations) yield an;
       }
     }
   }
@@ -151,14 +139,12 @@ export function* walkAssociations(
 ): Iterable<{ owner: WithMembers; association: AssociationDeclaration }> {
   for (const def of walkDefinitions(file)) {
     if (!hasMembers(def)) continue;
-    for (const m of def.members) {
-      if (!isAssociation(m)) continue;
-      yield { owner: def, association: m };
-    }
-    if (def.kind === 'extension') {
-      for (const a of def.associations) {
-        yield { owner: def, association: a };
-      }
+    const pools: AssociationDeclaration[][] = [
+      def.members.filter(isAssociation),
+    ];
+    if (def.kind === 'extension') pools.push(def.associations);
+    for (const association of pools.flat()) {
+      yield { owner: def, association };
     }
   }
 }
