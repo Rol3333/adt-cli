@@ -53,6 +53,45 @@ describe('AbapGitSerializer', () => {
     );
   });
 
+  it('round-trips Include and executable report types with their sources', async () => {
+    const includeSource = 'INCLUDE ztest_include.';
+    const reportSource = 'REPORT ztest_report.';
+    const includeFiles = await programHandler.serialize({
+      name: 'ZTEST_INCLUDE',
+      kind: 'Include',
+      getSource: async () => includeSource,
+    } as never);
+    const reportFiles = await programHandler.serialize({
+      name: 'ZTEST_REPORT',
+      kind: 'Program',
+      getSource: async () => reportSource,
+    } as never);
+
+    const fromAbapGit = programHandler.fromAbapGit;
+    assert.ok(fromAbapGit);
+    const include = fromAbapGit({
+      PROGDIR: { NAME: 'ZTEST_INCLUDE', SUBC: 'I', FIXPT: 'X', UNICODE: 'X' },
+    } as never);
+    const report = fromAbapGit({
+      PROGDIR: { NAME: 'ZTEST_REPORT', SUBC: '1', FIXPT: 'X', UNICODE: 'X' },
+    } as never);
+
+    assert.equal(include.type, 'PROG/I');
+    assert.equal(report.type, 'PROG/P');
+    assert.ok('programType' in include);
+    assert.ok('programType' in report);
+    assert.equal(include.programType, 'subroutinePool');
+    assert.equal(report.programType, 'executableProgram');
+    assert.equal(
+      includeFiles.find((file) => file.path.endsWith('.abap'))!.content,
+      includeSource,
+    );
+    assert.equal(
+      reportFiles.find((file) => file.path.endsWith('.abap'))!.content,
+      reportSource,
+    );
+  });
+
   it('writes namespaced BDEF files below the target directory', async () => {
     const targetPath = createTempDir();
     const serializer = new AbapGitSerializer();

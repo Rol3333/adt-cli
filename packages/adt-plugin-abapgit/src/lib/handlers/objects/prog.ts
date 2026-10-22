@@ -40,7 +40,7 @@ export const programHandler = createHandler<AdkProgram | AdkInclude>('PROG', {
 
     return {
       name: (PROGDIR?.NAME ?? '').toUpperCase(),
-      type: 'PROG/P',
+      type: subc === 'I' ? 'PROG/I' : 'PROG/P',
       description: descriptionEntry?.ENTRY ?? 'Program',
       fixPointArithmetic: PROGDIR?.FIXPT === 'X',
       activeUnicodeCheck: PROGDIR?.UNICODE === 'X',
