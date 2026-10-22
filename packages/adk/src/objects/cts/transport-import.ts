@@ -196,7 +196,7 @@ export class AdkTransportObjectRef {
       workbenchType.startsWith(`${ctsType}/`) &&
       getRegisteredTypes().includes(workbenchType)
         ? workbenchType
-        : this.type;
+        : ctsType;
 
     // Use the factory to get the object
     // The factory handles type resolution and loading

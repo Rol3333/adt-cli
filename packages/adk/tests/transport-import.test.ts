@@ -748,17 +748,17 @@ describe('AdkTransportObjectRef', () => {
     expect(factoryGet).toHaveBeenCalledWith('ZAPI_STRUCTURE', 'TABL/DS');
   });
 
-  it('falls back to the CTS type when the workbench subtype is absent or unregistered', async () => {
+  it('falls back to the normalized CTS type when the workbench subtype is absent or unregistered', async () => {
     const { AdkTransportObjectRef } = await import('../src/index');
     const absentSubtype = new AdkTransportObjectRef({} as any, {
       pgmid: 'R3TR',
-      type: 'TABL',
+      type: ' tabl ',
       name: 'ZAPI_TABLE',
     });
     const unregisteredSubtype = new AdkTransportObjectRef({} as any, {
       pgmid: 'R3TR',
-      type: 'TABL',
-      wbtype: 'TABL/UNKNOWN',
+      type: ' tabl ',
+      wbtype: ' tabl/unknown ',
       name: 'ZAPI_UNKNOWN',
     });
 

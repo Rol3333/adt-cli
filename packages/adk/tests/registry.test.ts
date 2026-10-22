@@ -199,6 +199,13 @@ describe('isTypeRegistered', () => {
     registerObjectType('TABL', kinds.Table, mockCtor);
     expect(isTypeRegistered('TABL/DS')).toBe(true);
   });
+
+  it('should recognize an exact subtype without treating unknown siblings as registered', () => {
+    registerObjectType('TABL/DS', kinds.Structure as AdkKind, mockCtor);
+
+    expect(isTypeRegistered('TABL/DS')).toBe(true);
+    expect(isTypeRegistered('TABL/UNKNOWN')).toBe(false);
+  });
 });
 
 describe('getRegisteredTypes', () => {

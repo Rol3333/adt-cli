@@ -202,7 +202,7 @@ export function getTypeForKind(kind: AdkKind): string | undefined {
  * Check if ADT type is registered
  */
 export function isTypeRegistered(adtType: string): boolean {
-  return registry.has(getMainType(adtType));
+  return resolveType(adtType) !== undefined;
 }
 
 /**
