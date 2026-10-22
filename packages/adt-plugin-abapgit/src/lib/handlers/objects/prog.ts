@@ -2,11 +2,11 @@
  * Program (PROG) object handler for abapGit format
  */
 
-import { AdkProgram } from '../adk';
+import { AdkInclude, AdkProgram } from '../adk';
 import { prog } from '../../../schemas/generated';
 import { createHandler } from '../base';
 
-export const programHandler = createHandler(AdkProgram, {
+export const programHandler = createHandler<AdkProgram | AdkInclude>('PROG', {
   schema: prog,
   version: 'v1.0.0',
   serializer: 'LCL_OBJECT_PROG',
@@ -17,7 +17,7 @@ export const programHandler = createHandler(AdkProgram, {
     PROGDIR: {
       NAME: obj.name ?? '',
       STATE: 'A',
-      SUBC: '1',
+      SUBC: obj.kind === AdkInclude.kind ? 'I' : '1',
       FIXPT: 'X',
       UNICODE: 'X',
     },

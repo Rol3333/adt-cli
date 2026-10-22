@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AbapGitSerializer } from '../src/lib/serializer.ts';
+import { programHandler } from '../src/lib/handlers/objects/prog.ts';
 import '../src/lib/handlers/objects/index.ts';
 
 const tempDirs: string[] = [];
@@ -21,6 +22,37 @@ afterEach(() => {
 });
 
 describe('AbapGitSerializer', () => {
+  it('serializes a PROG/I include as prog files with SUBCI', async () => {
+    const includeSource = 'INCLUDE zapi_include.';
+    const files = await programHandler.serialize({
+      name: 'ZAPI_INCLUDE',
+      kind: 'Include',
+      getSource: async () => includeSource,
+    } as never);
+
+    assert.deepEqual(files.map((file) => file.path).sort(), [
+      'zapi_include.prog.abap',
+      'zapi_include.prog.xml',
+    ]);
+    assert.match(
+      files.find((file) => file.path.endsWith('.xml'))!.content,
+      /<SUBC>I<\/SUBC>/,
+    );
+  });
+
+  it('keeps executable reports at SUBC1', async () => {
+    const files = await programHandler.serialize({
+      name: 'ZAPI_REPORT',
+      kind: 'Program',
+      getSource: async () => 'REPORT zapi_report.',
+    } as never);
+
+    assert.match(
+      files.find((file) => file.path.endsWith('.xml'))!.content,
+      /<SUBC>1<\/SUBC>/,
+    );
+  });
+
   it('writes namespaced BDEF files below the target directory', async () => {
     const targetPath = createTempDir();
     const serializer = new AbapGitSerializer();

@@ -175,3 +175,6 @@ import { registerObjectType } from '../../../base/registry';
 registerObjectType('INCL', IncludeKind, AdkInclude, {
   endpoint: 'programs/includes',
 });
+registerObjectType('PROG/I', IncludeKind, AdkInclude, {
+  endpoint: 'programs/includes',
+});
