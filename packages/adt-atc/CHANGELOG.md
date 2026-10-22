@@ -1,3 +1,13 @@
+## 0.4.21 (2026-10-22)
+
+### 🚀 Features
+
+- **atc:** resolve finding check categories from the check variant form template ([#239](https://github.com/abapify/adt-cli/pull/239))
+
+### ❤️ Thank You
+
+- Petr Plenkov @ThePlenkov
+
 ## 0.4.20 (2026-10-22)
 
 This was a version bump only for adt-atc to align it with other projects, there were no code changes.

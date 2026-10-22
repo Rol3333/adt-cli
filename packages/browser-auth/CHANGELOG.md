@@ -1,3 +1,7 @@
+## 0.4.21 (2026-10-22)
+
+This was a version bump only for @abapify/browser-auth to align it with other projects, there were no code changes.
+
 ## 0.4.20 (2026-10-22)
 
 This was a version bump only for @abapify/browser-auth to align it with other projects, there were no code changes.

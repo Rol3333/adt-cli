@@ -1,6 +1,6 @@
 {
   "name": "@abapify/adt-aunit",
-  "version": "0.4.20",
+  "version": "0.4.21",
   "description": "ABAP Unit Test CLI plugin for adt-cli with JUnit XML output for GitLab CI",
   "license": "MIT",
   "publishConfig": {
@@ -29,10 +29,10 @@
     "gitlab-ci"
   ],
   "dependencies": {
-    "@abapify/adt-plugin": "0.4.20",
-    "@abapify/adt-schemas": "0.4.20",
-    "@abapify/adt-contracts": "0.4.20",
-    "@abapify/adt-plugin-abapgit": "0.4.20"
+    "@abapify/adt-plugin": "0.4.21",
+    "@abapify/adt-schemas": "0.4.21",
+    "@abapify/adt-contracts": "0.4.21",
+    "@abapify/adt-plugin-abapgit": "0.4.21"
   },
   "module": "./dist/index.mjs",
   "repository": {
