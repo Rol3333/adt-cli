@@ -161,6 +161,14 @@ describe('getKindForType', () => {
     expect(getKindForType('TABL/DS')).toBe(kinds.Table);
   });
 
+  it('should prefer an exact registered subtype and fall back to its base type', () => {
+    registerObjectType('PROG', kinds.Program, mockCtor);
+    registerObjectType('PROG/I', kinds.Include, mockCtor);
+
+    expect(getKindForType('PROG/I')).toBe(kinds.Include);
+    expect(getKindForType('PROG/UNKNOWN')).toBe(kinds.Program);
+  });
+
   it('should return undefined for unregistered type', () => {
     expect(getKindForType('UNREG')).toBeUndefined();
   });

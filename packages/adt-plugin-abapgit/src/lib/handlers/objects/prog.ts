@@ -6,7 +6,23 @@ import { AdkInclude, AdkProgram } from '../adk';
 import { prog } from '../../../schemas/generated';
 import { createHandler } from '../base';
 
-export const programHandler = createHandler<AdkProgram | AdkInclude>('PROG', {
+function programSubc(obj: AdkProgram | AdkInclude): string {
+  if (obj.kind === AdkInclude.kind) return 'I';
+  if (!obj.isLoaded) return '1';
+  switch (obj.dataSync.programType) {
+    case 'modulePool':
+      return 'M';
+    case 'subroutinePool':
+      return 'S';
+    default:
+      return '1';
+  }
+}
+
+export const programHandler = createHandler<
+  AdkProgram | AdkInclude,
+  typeof prog
+>('PROG', {
   schema: prog,
   version: 'v1.0.0',
   serializer: 'LCL_OBJECT_PROG',
@@ -17,7 +33,7 @@ export const programHandler = createHandler<AdkProgram | AdkInclude>('PROG', {
     PROGDIR: {
       NAME: obj.name ?? '',
       STATE: 'A',
-      SUBC: obj.kind === AdkInclude.kind ? 'I' : '1',
+      SUBC: programSubc(obj),
       FIXPT: 'X',
       UNICODE: 'X',
     },
@@ -38,13 +54,22 @@ export const programHandler = createHandler<AdkProgram | AdkInclude>('PROG', {
     // SUBC can be parsed as number or string depending on XML parser
     const subc = String(PROGDIR?.SUBC ?? '');
 
-    return {
+    const data = {
       name: (PROGDIR?.NAME ?? '').toUpperCase(),
-      type: subc === 'I' ? 'PROG/I' : 'PROG/P',
       description: descriptionEntry?.ENTRY ?? 'Program',
       fixPointArithmetic: PROGDIR?.FIXPT === 'X',
       activeUnicodeCheck: PROGDIR?.UNICODE === 'X',
-      programType: subc === '1' ? 'executableProgram' : 'subroutinePool',
+    };
+    if (subc === 'I') return { ...data, type: 'PROG/I' };
+    return {
+      ...data,
+      type: 'PROG/P',
+      programType:
+        subc === 'M'
+          ? 'modulePool'
+          : subc === 'S'
+            ? 'subroutinePool'
+            : 'executableProgram',
     };
   },
 

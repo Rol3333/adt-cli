@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const factoryGet = vi.fn();
 const formatImport = vi.fn();
 const quickSearch = vi.fn();
+const isSupported = vi.fn();
 
 vi.mock('@abapify/adk', () => ({
   AdkPackage: {
@@ -32,7 +33,7 @@ vi.mock('../../../src/utils/format-loader', () => ({
     name: 'abapGit',
     description: 'abapGit format plugin',
     instance: {
-      registry: { isSupported: vi.fn(() => true) },
+      registry: { isSupported },
       format: { import: formatImport },
       hooks: {},
     },
@@ -49,11 +50,13 @@ describe('ImportService.importObject()', () => {
     factoryGet.mockReset();
     formatImport.mockReset();
     quickSearch.mockReset();
+    isSupported.mockReset();
     factoryGet.mockImplementation((_name, type) => ({
       type,
       load: vi.fn(async () => undefined),
     }));
     formatImport.mockResolvedValue({ success: true, filesCreated: [] });
+    isSupported.mockReturnValue(true);
     quickSearch.mockResolvedValue({
       objectReference: [
         {
@@ -102,6 +105,7 @@ describe('ImportService.importObject()', () => {
   });
 
   it('uses the full search type for the factory while checking format support by CTS base type', async () => {
+    isSupported.mockImplementation((type: string) => type === 'TABL');
     quickSearch.mockResolvedValue({
       objectReference: [
         {
@@ -122,6 +126,8 @@ describe('ImportService.importObject()', () => {
     });
 
     expect(factoryGet).toHaveBeenCalledWith('ZAPI_STRUCTURE', 'TABL/DS');
+    expect(isSupported).toHaveBeenCalledWith('TABL');
+    expect(isSupported).not.toHaveBeenCalledWith('TABL/DS');
     expect(result.objectType).toBe('TABL');
   });
 });
