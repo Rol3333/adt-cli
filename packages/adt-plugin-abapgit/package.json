@@ -1,6 +1,6 @@
 {
   "name": "@abapify/adt-plugin-abapgit",
-  "version": "0.4.19",
+  "version": "0.4.20",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
@@ -19,12 +19,12 @@
     "xsd"
   ],
   "dependencies": {
-    "@abapify/acds": "0.4.19",
-    "@abapify/adk": "0.4.19",
-    "@abapify/adt-atc": "0.4.19",
-    "@abapify/adt-plugin": "0.4.19",
-    "@abapify/adt-schemas": "0.4.19",
-    "@abapify/ts-xsd": "0.4.19"
+    "@abapify/acds": "0.4.20",
+    "@abapify/adk": "0.4.20",
+    "@abapify/adt-atc": "0.4.20",
+    "@abapify/adt-plugin": "0.4.20",
+    "@abapify/adt-schemas": "0.4.20",
+    "@abapify/ts-xsd": "0.4.20"
   },
   "repository": {
     "type": "git",

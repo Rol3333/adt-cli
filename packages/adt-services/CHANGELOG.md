@@ -1,3 +1,14 @@
+## 0.4.20 (2026-10-22)
+
+### 🩹 Fixes
+
+- **abapgit:** preserve program subtype metadata and source handoff ([b5394ab9](https://github.com/abapify/adt-cli/commit/b5394ab9))
+- **import:** preserve workbench subtypes and include serialization ([b0fd0106](https://github.com/abapify/adt-cli/commit/b0fd0106))
+
+### ❤️ Thank You
+
+- Petr Plenkov @ThePlenkov
+
 ## 0.4.19 (2026-10-21)
 
 This was a version bump only for adt-services to align it with other projects, there were no code changes.
