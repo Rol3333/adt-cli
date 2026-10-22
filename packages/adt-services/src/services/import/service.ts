@@ -753,9 +753,10 @@ export class ImportService {
       );
     }
 
-    // Step 4: Load ADK object via factory
+    // Step 4: Load the full ADT type via the factory so registered subtypes
+    // select their specific endpoint; the format registry uses the base type.
     const factory = createAdkFactory(ctx);
-    const adkObject = factory.get(String(exactMatch.name), baseType);
+    const adkObject = factory.get(String(exactMatch.name), fullType);
     await (adkObject as any).load();
 
     // Step 5: Serialize via format plugin

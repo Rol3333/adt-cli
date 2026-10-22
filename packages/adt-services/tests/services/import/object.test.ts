@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const factoryGet = vi.fn();
 const formatImport = vi.fn();
+const quickSearch = vi.fn();
+const isSupported = vi.fn();
 
 vi.mock('@abapify/adk', () => ({
   AdkPackage: {
@@ -17,20 +19,7 @@ vi.mock('@abapify/adk', () => ({
         repository: {
           informationsystem: {
             search: {
-              quickSearch: vi.fn(async () => ({
-                objectReference: [
-                  {
-                    name: 'Z_SHARED_NAME',
-                    type: 'BDEF/BDO',
-                    packageName: 'ZPKG',
-                  },
-                  {
-                    name: 'Z_SHARED_NAME',
-                    type: 'DDLX',
-                    packageName: 'ZPKG',
-                  },
-                ],
-              })),
+              quickSearch,
             },
           },
         },
@@ -44,7 +33,7 @@ vi.mock('../../../src/utils/format-loader', () => ({
     name: 'abapGit',
     description: 'abapGit format plugin',
     instance: {
-      registry: { isSupported: vi.fn(() => true) },
+      registry: { isSupported },
       format: { import: formatImport },
       hooks: {},
     },
@@ -60,11 +49,28 @@ describe('ImportService.importObject()', () => {
   beforeEach(() => {
     factoryGet.mockReset();
     formatImport.mockReset();
+    quickSearch.mockReset();
+    isSupported.mockReset();
     factoryGet.mockImplementation((_name, type) => ({
       type,
       load: vi.fn(async () => undefined),
     }));
     formatImport.mockResolvedValue({ success: true, filesCreated: [] });
+    isSupported.mockReturnValue(true);
+    quickSearch.mockResolvedValue({
+      objectReference: [
+        {
+          name: 'Z_SHARED_NAME',
+          type: 'BDEF/BDO',
+          packageName: 'ZPKG',
+        },
+        {
+          name: 'Z_SHARED_NAME',
+          type: 'DDLX',
+          packageName: 'ZPKG',
+        },
+      ],
+    });
   });
 
   it('selects the requested type when the same name belongs to multiple object types', async () => {
@@ -96,5 +102,32 @@ describe('ImportService.importObject()', () => {
       "Object 'Z_SHARED_NAME' is ambiguous. Use --object-type to select one of: BDEF, DDLX.",
     );
     expect(factoryGet).not.toHaveBeenCalled();
+  });
+
+  it('uses the full search type for the factory while checking format support by CTS base type', async () => {
+    isSupported.mockImplementation((type: string) => type === 'TABL');
+    quickSearch.mockResolvedValue({
+      objectReference: [
+        {
+          name: 'ZAPI_STRUCTURE',
+          type: 'TABL/DS',
+          packageName: 'ZPKG',
+        },
+      ],
+    });
+    const { ImportService } =
+      await import('../../../src/services/import/service');
+
+    const result = await new ImportService().importObject({
+      objectName: 'ZAPI_STRUCTURE',
+      objectType: 'TABL',
+      outputPath: '/tmp/import-object',
+      format: 'abapgit',
+    });
+
+    expect(factoryGet).toHaveBeenCalledWith('ZAPI_STRUCTURE', 'TABL/DS');
+    expect(isSupported).toHaveBeenCalledWith('TABL');
+    expect(isSupported).not.toHaveBeenCalledWith('TABL/DS');
+    expect(result.objectType).toBe('TABL');
   });
 });

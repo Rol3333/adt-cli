@@ -11,6 +11,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AdkInclude } from '../src/objects/repository/incl/incl.model';
 import type { AdkContext } from '../src/base/context';
+import { Include } from '../src/base/kinds';
+import { getTypeForKind } from '../src/base/registry';
+import { createAdkFactory } from '../src/factory';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +93,21 @@ function createCtx(
 // ── AdkInclude ──────────────────────────────────────────────────────────────
 
 describe('AdkInclude', () => {
+  it('resolves PROG/I and legacy INCL to the include model and source endpoint', async () => {
+    const { ctx, includes } = createCtx();
+    const factory = createAdkFactory(ctx);
+    const typed = factory.get('ZAPI_INCLUDE', 'PROG/I');
+    const legacy = factory.get('ZAPI_LEGACY_INCLUDE', 'INCL');
+
+    expect(typed).toBeInstanceOf(AdkInclude);
+    expect(legacy).toBeInstanceOf(AdkInclude);
+    expect(getTypeForKind(Include)).toBe('PROG/I');
+
+    await (typed as AdkInclude).getSource();
+
+    expect(includes.source.main.get).toHaveBeenCalledWith('ZAPI_INCLUDE');
+  });
+
   it('objectUri constructs lowercase URI for the include', () => {
     const { ctx } = createCtx();
     const obj = new AdkInclude(ctx, 'ZTEST_INCLUDE');

@@ -12,6 +12,12 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+const factoryGet = vi.fn();
+
+vi.mock('../src/factory', () => ({
+  createAdk: vi.fn(() => ({ get: factoryGet })),
+}));
+
 // Mock the ADT client
 // Response must have 'root' wrapper to match TransportmanagementSingleSchema
 const mockTransportResponse = {
@@ -694,6 +700,11 @@ describe('MergedTransportView', () => {
 });
 
 describe('AdkTransportObjectRef', () => {
+  beforeEach(() => {
+    factoryGet.mockReset();
+    factoryGet.mockReturnValue({ load: vi.fn(async () => undefined) });
+  });
+
   it('should have correct type and name', async () => {
     const mockClient = createMockClient();
 
@@ -723,8 +734,40 @@ describe('AdkTransportObjectRef', () => {
     expect(objRef.isDeleted).toBe(false);
   });
 
-  // Note: objRef.load() test would require mocking the ADK factory
-  // which is more complex - skipping for now as it requires full ADK setup
+  it('uses a registered workbench subtype to select the factory object', async () => {
+    const { AdkTransportObjectRef } = await import('../src/index');
+    const objRef = new AdkTransportObjectRef({} as any, {
+      pgmid: 'R3TR',
+      type: 'TABL',
+      wbtype: 'TABL/DS',
+      name: 'ZAPI_STRUCTURE',
+    });
+
+    await objRef.load();
+
+    expect(factoryGet).toHaveBeenCalledWith('ZAPI_STRUCTURE', 'TABL/DS');
+  });
+
+  it('falls back to the normalized CTS type when the workbench subtype is absent or unregistered', async () => {
+    const { AdkTransportObjectRef } = await import('../src/index');
+    const absentSubtype = new AdkTransportObjectRef({} as any, {
+      pgmid: 'R3TR',
+      type: ' tabl ',
+      name: 'ZAPI_TABLE',
+    });
+    const unregisteredSubtype = new AdkTransportObjectRef({} as any, {
+      pgmid: 'R3TR',
+      type: ' tabl ',
+      wbtype: ' tabl/unknown ',
+      name: 'ZAPI_UNKNOWN',
+    });
+
+    await absentSubtype.load();
+    await unregisteredSubtype.load();
+
+    expect(factoryGet).toHaveBeenNthCalledWith(1, 'ZAPI_TABLE', 'TABL');
+    expect(factoryGet).toHaveBeenNthCalledWith(2, 'ZAPI_UNKNOWN', 'TABL');
+  });
 });
 
 describe('AdkTransportTaskRef', () => {

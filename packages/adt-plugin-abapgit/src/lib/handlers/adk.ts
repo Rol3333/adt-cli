@@ -10,6 +10,7 @@ export {
   AdkInterface,
   AdkPackage,
   AdkProgram,
+  AdkInclude,
   AdkFunctionGroup,
   AdkFunctionModule,
   AdkDomain,

@@ -187,7 +187,8 @@ export function resolveKind(kind: AdkKind): RegistryEntry | undefined {
  * Get ADK kind for ADT type
  */
 export function getKindForType(adtType: string): AdkKind | undefined {
-  return adtToKind.get(getMainType(adtType));
+  const normalizedType = adtType.toUpperCase();
+  return adtToKind.get(normalizedType) ?? adtToKind.get(getMainType(adtType));
 }
 
 /**
@@ -201,7 +202,7 @@ export function getTypeForKind(kind: AdkKind): string | undefined {
  * Check if ADT type is registered
  */
 export function isTypeRegistered(adtType: string): boolean {
-  return registry.has(getMainType(adtType));
+  return resolveType(adtType) !== undefined;
 }
 
 /**
