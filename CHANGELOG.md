@@ -1,3 +1,13 @@
+## 0.4.22 (2026-10-23)
+
+### 🩹 Fixes
+
+- **flow:** never reuse the active 00000 source version ([#240](https://github.com/abapify/adt-cli/pull/240))
+
+### ❤️ Thank You
+
+- Petr Plenkov @ThePlenkov
+
 ## 0.4.21 (2026-10-22)
 
 ### 🚀 Features
