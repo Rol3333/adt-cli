@@ -1,3 +1,19 @@
+## 0.4.23 (2026-10-25)
+
+### 🚀 Features
+
+- **adt-plugin-gcts:** AFF wave-0 machinery — schema access, validation, codegen, coverage ([#232](https://github.com/abapify/adt-cli/pull/232))
+- **adt-plugin-gcts:** schema-aware generic emit/parse for all wave2 stubs ([#233](https://github.com/abapify/adt-cli/pull/233))
+- **adt-plugin-gcts:** spec file-name grammar + full source-extension coverage ([#234](https://github.com/abapify/adt-cli/pull/234))
+- **adt-plugin-gcts:** source companions + DOCU for wave2 stubs ([#235](https://github.com/abapify/adt-cli/pull/235))
+- **adt-plugin-gcts:** LIMU sub-objects + extension-aware source keys ([#238](https://github.com/abapify/adt-cli/pull/238))
+
+### ❤️ Thank You
+
+- Devin @devin-ai-integration[bot]
+- Petr Plenkov @ThePlenkov
+- ThePlenkov @ThePlenkov
+
 ## 0.4.22 (2026-10-23)
 
 ### 🩹 Fixes
