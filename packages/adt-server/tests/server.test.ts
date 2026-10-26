@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 // eslint-disable-next-line @nx/enforce-module-boundaries
@@ -183,6 +184,86 @@ test('keeps MCP unavailable when no guarded handler is configured', async () => 
   try {
     const response = await fetch(`${server.url}/mcp`);
     assert.strictEqual(response.status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test('keeps liveness available while a configured readiness probe fails without leaking its error', async () => {
+  const server = await startTestAdtServer({
+    operations,
+    host: '127.0.0.1',
+    port: 0,
+    readinessProbe: async () => {
+      throw new Error('broker destination summary contained secret-details');
+    },
+  } as Parameters<typeof startTestAdtServer>[0]);
+
+  try {
+    const ready = await fetch(`${server.url}/readyz`);
+    assert.strictEqual(ready.status, 503);
+    assert.doesNotMatch(
+      await ready.text(),
+      /broker|destination|secret-details/i,
+    );
+
+    const health = await fetch(`${server.url}/healthz`);
+    assert.strictEqual(health.status, 200);
+    assert.deepStrictEqual(await health.json(), { status: 'ok' });
+  } finally {
+    await server.close();
+  }
+});
+
+test('checks a configured readiness probe only for readiness', async () => {
+  let probeCalls = 0;
+  const server = await startTestAdtServer({
+    operations,
+    host: '127.0.0.1',
+    port: 0,
+    readinessProbe: async () => {
+      probeCalls++;
+    },
+  });
+
+  try {
+    const health = await fetch(`${server.url}/healthz`);
+    assert.strictEqual(health.status, 200);
+    assert.strictEqual(probeCalls, 0);
+
+    const ready = await fetch(`${server.url}/readyz`);
+    assert.strictEqual(ready.status, 200);
+    assert.deepStrictEqual(await ready.json(), { status: 'ready' });
+    assert.strictEqual(probeCalls, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test('aborts a readiness probe that exceeds its deadline', async () => {
+  let aborted = false;
+  const server = await startTestAdtServer({
+    operations,
+    host: '127.0.0.1',
+    port: 0,
+    readinessTimeoutMs: 20,
+    readinessProbe: async (signal) =>
+      await new Promise<void>((resolve) => {
+        signal.addEventListener(
+          'abort',
+          () => {
+            aborted = true;
+            resolve();
+          },
+          { once: true },
+        );
+      }),
+  });
+
+  try {
+    const ready = await fetch(`${server.url}/readyz`);
+    assert.strictEqual(ready.status, 503);
+    assert.strictEqual(aborted, true);
   } finally {
     await server.close();
   }
@@ -1413,3 +1494,185 @@ test('REST source reads redeem an opaque destination-bound manifest capability',
     await server.close();
   }
 });
+
+test('coalesces pending readiness checks without caching a settled result', async () => {
+  let calls = 0;
+  const server = await startTestAdtServer({
+    operations,
+    host: '127.0.0.1',
+    port: 0,
+    readinessProbe: async () => {
+      calls++;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    },
+  });
+  try {
+    const responses = await Promise.all(
+      Array.from({ length: 3 }, () => fetch(`${server.url}/readyz`)),
+    );
+    assert.deepStrictEqual(
+      responses.map((response) => response.status),
+      [200, 200, 200],
+    );
+    assert.strictEqual(calls, 1);
+    assert.strictEqual((await fetch(`${server.url}/readyz`)).status, 200);
+    assert.strictEqual(calls, 2);
+  } finally {
+    await server.close();
+  }
+});
+
+test('one disconnected caller does not cancel the shared readiness check', async () => {
+  let started!: () => void;
+  const running = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+  let probeSignal: AbortSignal | undefined;
+  const createServer = vi.spyOn(http, 'createServer');
+  let server: Awaited<ReturnType<typeof startTestAdtServer>>;
+  let listener: http.Server;
+  try {
+    server = await startTestAdtServer({
+      operations,
+      host: '127.0.0.1',
+      port: 0,
+      readinessProbe: async (signal) => {
+        calls++;
+        probeSignal = signal;
+        started();
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = () => reject(new Error('Aborted'));
+          signal.addEventListener('abort', onAbort, { once: true });
+          void released.then(() => {
+            signal.removeEventListener('abort', onAbort);
+            resolve();
+          });
+        });
+      },
+    });
+    listener = createServer.mock.results[0].value as http.Server;
+  } finally {
+    createServer.mockRestore();
+  }
+  try {
+    const disconnected = new Promise<void>((resolve) => {
+      listener.once('request', (request) => {
+        request.socket.once('close', () => resolve());
+      });
+    });
+    const abandoned = http.get(`${server.url}/readyz`);
+    abandoned.on('error', () => undefined);
+    await running;
+    const survivingArrived = new Promise<void>((resolve) => {
+      listener.once('request', () => resolve());
+    });
+    const surviving = fetch(`${server.url}/readyz`);
+    await survivingArrived;
+    abandoned.destroy();
+    await disconnected;
+    assert.strictEqual(probeSignal?.aborted, false);
+    release();
+    assert.strictEqual((await surviving).status, 200);
+    assert.strictEqual(calls, 1);
+  } finally {
+    release();
+    await server.close();
+  }
+});
+
+test.each([0, -1, NaN, Infinity, 2_147_483_648])(
+  'rejects readiness deadline %s before accessing MCP resources',
+  async (readinessTimeoutMs) => {
+    let mcpAccesses = 0;
+    await assert.rejects(
+      () =>
+        startAdtServer({
+          operations,
+          readinessTimeoutMs,
+          readinessProbe: async () => undefined,
+          get mcp() {
+            mcpAccesses++;
+            throw new Error('MCP resource allocation reached');
+          },
+        }),
+      /readinessTimeoutMs/u,
+    );
+    assert.strictEqual(mcpAccesses, 0);
+  },
+);
+
+test('reports a shared deadline failure once with only a safe reason and rechecks after settlement', async () => {
+  const reports: unknown[][] = [];
+  let calls = 0;
+  const server = await startTestAdtServer({
+    operations,
+    host: '127.0.0.1',
+    port: 0,
+    readinessTimeoutMs: 100,
+    readinessProbe: async () => {
+      calls++;
+      await new Promise<void>(() => undefined);
+    },
+    onReadinessFailure: (...args) => {
+      reports.push(args);
+    },
+  });
+  try {
+    const responses = await Promise.all(
+      Array.from({ length: 3 }, () => fetch(`${server.url}/readyz`)),
+    );
+    assert.deepStrictEqual(
+      responses.map((response) => response.status),
+      [503, 503, 503],
+    );
+    assert.deepStrictEqual(reports, [['timeout']]);
+    assert.strictEqual(calls, 1);
+    assert.strictEqual((await fetch(`${server.url}/readyz`)).status, 503);
+    assert.deepStrictEqual(reports, [['timeout'], ['timeout']]);
+    assert.strictEqual(calls, 2);
+  } finally {
+    await server.close();
+  }
+});
+
+test.each(['sync', 'async'])(
+  'safe readiness reporting isolates %s reporter errors and never discloses probe secrets',
+  async (mode) => {
+    const reports: unknown[][] = [];
+    const probeErrorMessage = `authorization=${randomUUID()} https://private.invalid/destination`;
+    const server = await startTestAdtServer({
+      operations,
+      host: '127.0.0.1',
+      port: 0,
+      readinessProbe: async () => {
+        throw new Error(probeErrorMessage);
+      },
+      onReadinessFailure: (...args) => {
+        reports.push(args);
+        if (mode === 'async') {
+          return Promise.reject(new Error('reporter secret'));
+        }
+        throw new Error('reporter secret');
+      },
+    });
+    try {
+      const ready = await fetch(`${server.url}/readyz`);
+      assert.strictEqual(ready.status, 503);
+      assert.deepStrictEqual(await ready.json(), { status: 'not ready' });
+      assert.deepStrictEqual(reports, [['probe_failed']]);
+      assert.strictEqual(
+        JSON.stringify(reports).includes(probeErrorMessage),
+        false,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.strictEqual((await fetch(`${server.url}/healthz`)).status, 200);
+    } finally {
+      await server.close();
+    }
+  },
+);

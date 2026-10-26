@@ -19,15 +19,20 @@ import type {
   DestinationLeaseProvider,
 } from '@abapify/adt-mcp';
 import { resolveObjectUri } from '@abapify/adt-mcp';
-import type { DestinationSummary, AdtServerOperations } from './server.js';
+import type {
+  DestinationSummary,
+  AdtServerOperations,
+  ReadinessProbe,
+} from './server';
 import {
+  destinationSummaryResponse,
   MAX_PACKAGE_SEARCH_RESULTS,
   MAX_SOURCE_BYTES,
   type AtcRunBody,
   type ObjectSearchCriteria,
   type PackageSearchCriteria,
   type TransportSearchCriteria,
-} from './rest-schemas.js';
+} from './rest-schemas';
 
 export interface HttpBrokerOptions {
   baseUrl: string;
@@ -1025,8 +1030,12 @@ function extractTransportHeaders(response: unknown): CtsRequestHeader[] {
 
 function brokerLeaseHelpers(options: HttpBrokerOptions) {
   const fetcher = options.fetch ?? globalThis.fetch;
-  const readBrokerToken = async (): Promise<string> => {
-    const token = (await readFile(options.tokenFile, 'utf8')).trim();
+  const readBrokerToken = async (signal?: AbortSignal): Promise<string> => {
+    signal?.throwIfAborted();
+    const token = (
+      await readFile(options.tokenFile, { encoding: 'utf8', signal })
+    ).trim();
+    signal?.throwIfAborted();
     if (!token) throw new Error('ADT Server broker token file is empty');
     return token;
   };
@@ -1084,6 +1093,33 @@ function brokerLeaseHelpers(options: HttpBrokerOptions) {
       throw new Error(`Destination lease release failed (${response.status})`);
   };
   return { fetcher, readBrokerToken, acquireLease, releaseLease };
+}
+
+/** Read-only broker probe; it never acquires a destination lease or contacts SAP. */
+export function createHttpBrokerReadinessProbe(
+  options: HttpBrokerOptions,
+): ReadinessProbe {
+  const { fetcher, readBrokerToken } = brokerLeaseHelpers(options);
+  return async (signal) => {
+    signal.throwIfAborted();
+    const token = await readBrokerToken(signal);
+    signal.throwIfAborted();
+    const response = await fetcher(
+      new URL('/internal/adt-server/destinations', options.baseUrl),
+      {
+        headers: { 'x-adt-server-token': token },
+        redirect: 'error',
+        signal,
+      },
+    );
+    if (!response.ok)
+      throw new Error(`ADT Server broker request failed (${response.status})`);
+    if (!destinationSummaryResponse.safeParse(await response.json()).success) {
+      throw new Error(
+        'ADT Server broker returned an invalid destination summary',
+      );
+    }
+  };
 }
 
 /** ADT-private broker client. It exposes only safe summaries to the public server layer. */

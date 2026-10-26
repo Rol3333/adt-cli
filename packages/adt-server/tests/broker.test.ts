@@ -1,17 +1,127 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 import {
+  createHttpBrokerReadinessProbe,
   createHttpBrokerOperations,
   createHttpDestinationContexts,
 } from '../src/broker.js';
 
+const brokerToken = randomUUID();
+
+test('rejects a malformed broker destination summary without acquiring a destination lease', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
+  const tokenFile = path.join(directory, 'broker-token');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
+  const requests: Array<{
+    url: string;
+    authorization: string | null;
+    redirect: RequestRedirect | undefined;
+  }> = [];
+  const readinessProbe = createHttpBrokerReadinessProbe({
+    baseUrl: 'http://adt-api.internal',
+    tokenFile,
+    fetch: async (input, init) => {
+      requests.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get('x-adt-server-token'),
+        redirect: init?.redirect,
+      });
+      return new Response(
+        JSON.stringify({ data: { destination: 'not-an-array' } }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    },
+  });
+
+  try {
+    await assert.rejects(() => readinessProbe(new AbortController().signal));
+    assert.deepStrictEqual(requests, [
+      {
+        url: 'http://adt-api.internal/internal/adt-server/destinations',
+        authorization: brokerToken,
+        redirect: 'error',
+      },
+    ]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('accepts an empty broker destination summary', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
+  const tokenFile = path.join(directory, 'broker-token');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
+  const requests: Array<{ url: string; method: string; token: string | null }> =
+    [];
+  const readinessProbe = createHttpBrokerReadinessProbe({
+    baseUrl: 'http://adt-api.internal',
+    tokenFile,
+    fetch: async (input, init) => {
+      requests.push({
+        url: String(input),
+        method: init?.method ?? 'GET',
+        token: new Headers(init?.headers).get('x-adt-server-token'),
+      });
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  try {
+    await assert.doesNotReject(() =>
+      readinessProbe(new AbortController().signal),
+    );
+    assert.deepStrictEqual(requests, [
+      {
+        url: 'http://adt-api.internal/internal/adt-server/destinations',
+        method: 'GET',
+        token: brokerToken,
+      },
+    ]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('rejects an unavailable broker destination summary', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
+  const tokenFile = path.join(directory, 'broker-token');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
+  const readinessProbe = createHttpBrokerReadinessProbe({
+    baseUrl: 'http://adt-api.internal',
+    tokenFile,
+    fetch: async () =>
+      new Response(JSON.stringify({ data: [] }), { status: 503 }),
+  });
+
+  try {
+    await assert.rejects(
+      () => readinessProbe(new AbortController().signal),
+      /ADT Server broker request failed \(503\)/u,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('redeems a frozen source reference through the private ADT broker', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const requests: Array<{ url: string; headers: Headers; body: unknown }> = [];
   const contexts = createHttpDestinationContexts({
     baseUrl: 'http://adt-api.internal',
@@ -50,7 +160,7 @@ test('redeems a frozen source reference through the private ADT broker', async (
       [
         {
           url: 'http://adt-api.internal/internal/adt-server/frozen-source-references:resolve',
-          authorization: 'sidecar-token',
+          authorization: brokerToken,
           body: {
             destination: 'trl-adt',
             systemSid: 'TRL',
@@ -67,7 +177,7 @@ test('redeems a frozen source reference through the private ADT broker', async (
 test('preserves a sidecar-issued source capability for local redemption', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const contexts = createHttpDestinationContexts({
     baseUrl: 'http://adt-api.internal',
     tokenFile,
@@ -96,7 +206,7 @@ test('preserves a sidecar-issued source capability for local redemption', async 
 test('reads an immutable source through the bounded ADT primitive', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const reads: Array<{ sourceUri: string; maxBytes: number }> = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -158,7 +268,7 @@ test('reads an immutable source through the bounded ADT primitive', async () => 
 test('lists all system transport headers through CTS FIND and filters ADT-side', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const transportFindCalls: unknown[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -245,7 +355,7 @@ test('lists all system transport headers through CTS FIND and filters ADT-side',
 test('maps transport detail and objects to canonical REST references without ADT URIs', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   let lease = 0;
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -388,7 +498,7 @@ test('maps transport detail and objects to canonical REST references without ADT
 test('maps a bounded package quick search without exposing ADT URIs', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const queries: unknown[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -473,7 +583,7 @@ test('maps a bounded package quick search without exposing ADT URIs', async () =
 test('maps one rooted ADT subpackage tree to canonical package nodes without ADT URIs', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const treeCalls: unknown[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -551,7 +661,7 @@ test('maps one rooted ADT subpackage tree to canonical package nodes without ADT
 test('falls back to bounded package metadata traversal when the ADT tree capability is unavailable', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const getCalls: string[] = [];
   const unsupportedTree = Object.assign(new Error('not acceptable'), {
     name: 'AdtError',
@@ -640,7 +750,7 @@ test('falls back to bounded package metadata traversal when the ADT tree capabil
 test('maps a bounded object quick search to canonical REST objects without ADT URIs', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const queries: unknown[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -739,7 +849,7 @@ test('maps a bounded object quick search to canonical REST objects without ADT U
 test('maps direct package objects to canonical REST objects without foreign rows or ADT URIs', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const queries: unknown[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -829,7 +939,7 @@ test('maps direct package objects to canonical REST objects without foreign rows
 test('resolves canonical object metadata through the upstream resolver without leaking ADT links', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const propertyReads: unknown[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -946,7 +1056,7 @@ test('resolves canonical object metadata through the upstream resolver without l
 test('maps object source history to metadata only without leaking immutable source URIs', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const versionReads: string[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -1043,7 +1153,7 @@ test('maps object source history to metadata only without leaking immutable sour
 test('reads a bounded canonical object source without accepting or returning an ADT URI', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const sourceReads: Array<{
     path: string;
     maxBytes: number;
@@ -1112,7 +1222,7 @@ test('reads a bounded canonical object source without accepting or returning an 
 test('runs ATC from a canonical package scope and retains only the trusted documentation relation', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const calls: Array<{ kind: string; value: unknown }> = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -1262,7 +1372,7 @@ test('enriches ATC findings with check categories from the variant form template
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const documentationReads: string[] = [];
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const formtemplateCalls: unknown[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -1424,7 +1534,7 @@ test('enriches ATC findings with check categories from the variant form template
 test('runs ATC with unavailable check categories without failing the run', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
     tokenFile,
@@ -1517,7 +1627,7 @@ test('runs ATC with unavailable check categories without failing the run', async
 test('reads trusted ATC documentation through the bounded text primitive', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const reads: unknown[] = [];
   const operations = createHttpBrokerOperations({
     baseUrl: 'http://adt-api.internal',
@@ -1578,7 +1688,7 @@ test('reads trusted ATC documentation through the bounded text primitive', async
 test('releases an opaque REST lease with redacted success and failure outcomes', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const requests: Array<{ url: string; body?: unknown }> = [];
   let calls = 0;
   const operations = createHttpBrokerOperations({
@@ -1671,7 +1781,7 @@ test('releases an opaque REST lease with redacted success and failure outcomes',
 test('releases an MCP destination context through the private broker', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'adt-server-broker-'));
   const tokenFile = path.join(directory, 'broker-token');
-  await writeFile(tokenFile, 'sidecar-token\n', 'utf8');
+  await writeFile(tokenFile, `${brokerToken}\n`, 'utf8');
   const requests: Array<{ url: string; body?: unknown }> = [];
   const contexts = createHttpDestinationContexts({
     baseUrl: 'http://adt-api.internal',
@@ -1719,4 +1829,140 @@ test('releases an MCP destination context through the private broker', async () 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+const validReadinessSummary = {
+  key: 'dev',
+  displayName: 'Development',
+  systemSids: ['DEV'],
+  authConfigured: true,
+  version: 1,
+};
+
+test.each([
+  ['populated', { data: [validReadinessSummary] }, true],
+  [
+    'whitespace-only key',
+    { data: [{ ...validReadinessSummary, key: ' ' }] },
+    false,
+  ],
+  [
+    'blank display name',
+    { data: [{ ...validReadinessSummary, displayName: '' }] },
+    false,
+  ],
+  [
+    'blank system SID',
+    { data: [{ ...validReadinessSummary, systemSids: [' '] }] },
+    false,
+  ],
+  ['zero version', { data: [{ ...validReadinessSummary, version: 0 }] }, false],
+  [
+    'negative version',
+    { data: [{ ...validReadinessSummary, version: -1 }] },
+    false,
+  ],
+  [
+    'unknown entry field',
+    { data: [{ ...validReadinessSummary, extra: 'private' }] },
+    false,
+  ],
+  ['unknown response field', { data: [], extra: 'private' }, false],
+  [
+    'mixed valid and invalid entries',
+    { data: [validReadinessSummary, { ...validReadinessSummary, key: '' }] },
+    false,
+  ],
+])(
+  'validates %s broker readiness summary against the REST contract',
+  async (_name, body, accepted) => {
+    const directory = await mkdtemp(
+      path.join(os.tmpdir(), 'adt-readiness-contract-'),
+    );
+    try {
+      const tokenFile = path.join(directory, 'token');
+      await writeFile(tokenFile, 'synthetic-token');
+      const probe = createHttpBrokerReadinessProbe({
+        baseUrl: 'http://broker.invalid',
+        tokenFile,
+        fetch: async () => new Response(JSON.stringify(body), { status: 200 }),
+      });
+      if (accepted) {
+        await assert.doesNotReject(() => probe(new AbortController().signal));
+      } else {
+        await assert.rejects(
+          () => probe(new AbortController().signal),
+          /invalid destination summary/u,
+        );
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+test('already aborted readiness never reads a token or fetches', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const fetcher = vi.fn();
+  vi.mocked(readFile).mockClear();
+  const probe = createHttpBrokerReadinessProbe({
+    baseUrl: 'http://broker.invalid',
+    tokenFile: '/not-read',
+    fetch: fetcher,
+  });
+  await assert.rejects(() => probe(controller.signal), { name: 'AbortError' });
+  assert.strictEqual(vi.mocked(readFile).mock.calls.length, 0);
+  assert.strictEqual(fetcher.mock.calls.length, 0);
+});
+
+test('cancels a pending token read with the readiness signal and never fetches', async () => {
+  const controller = new AbortController();
+  const fetcher = vi.fn();
+  let started!: () => void;
+  const reading = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  vi.mocked(readFile).mockImplementationOnce(async (_path, options) => {
+    const signal =
+      typeof options === 'object' && options !== null
+        ? options.signal
+        : undefined;
+    started();
+    assert.strictEqual(signal, controller.signal);
+    return await new Promise<never>((_resolve, reject) => {
+      signal!.addEventListener(
+        'abort',
+        () => reject(new DOMException('Aborted', 'AbortError')),
+        { once: true },
+      );
+    });
+  });
+  const probe = createHttpBrokerReadinessProbe({
+    baseUrl: 'http://broker.invalid',
+    tokenFile: '/mocked-token',
+    fetch: fetcher,
+  });
+  const pending = probe(controller.signal);
+  const rejected = assert.rejects(pending, { name: 'AbortError' });
+  await reading;
+  controller.abort();
+  await rejected;
+  assert.strictEqual(fetcher.mock.calls.length, 0);
+});
+
+test('does not fetch when cancellation arrives just after the token read', async () => {
+  const controller = new AbortController();
+  const fetcher = vi.fn(async () => new Response(JSON.stringify({ data: [] })));
+  vi.mocked(readFile).mockImplementationOnce(async () => {
+    controller.abort();
+    return 'synthetic-token';
+  });
+  const probe = createHttpBrokerReadinessProbe({
+    baseUrl: 'http://broker.invalid',
+    tokenFile: '/mocked-token',
+    fetch: fetcher,
+  });
+  await assert.rejects(() => probe(controller.signal), { name: 'AbortError' });
+  assert.strictEqual(fetcher.mock.calls.length, 0);
 });
