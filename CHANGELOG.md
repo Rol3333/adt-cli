@@ -1,3 +1,13 @@
+## 0.4.24 (2026-10-26)
+
+### 🩹 Fixes
+
+- **adt-server:** report broker outages from readiness ([#258](https://github.com/abapify/adt-cli/pull/258))
+
+### ❤️ Thank You
+
+- Petr Plenkov @ThePlenkov
+
 ## 0.4.23 (2026-10-25)
 
 ### 🚀 Features
